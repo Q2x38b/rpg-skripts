@@ -266,8 +266,8 @@ function getRankName(p: player) :: text:
 function rankPrefixRaw(p: player) :: text:
   set {_r} to getRankName({_p})
   if {ranks::%{_r}%::prefix} is set:
-    return "%{ranks::%{_r}%::prefix}%{@rank_suffix_space}"
-  return "%{ranks::%defaultRank()%::prefix}%{@rank_suffix_space}"
+    return "%{ranks::%{_r}%::prefix}%{@rank_suffix_space}%"
+  return "%{ranks::%defaultRank()%::prefix}%{@rank_suffix_space}%"
 
 # Rank before level
 function fullPrefixRaw(p: player) :: text:
@@ -372,7 +372,7 @@ function applyTab(p: player):
   set {_pname} to name of {_p}
   set {_world} to "%world of {_p}%"
   set {_online} to "%size of all players%"
-  set {_anim} to "%animToken()%"
+  set {_anim} to animToken()
 
   replace all "{anim}" with {_anim} in {_header}
   replace all "{player}" with "%{_pname}%" in {_header}
@@ -411,11 +411,11 @@ function getGems(p: player) :: number:
 
 function applyScoreboard(p: player):
   # Some Skript builds use "wipe sidebar of player" + "set score ... in sidebar of player"
-  wipe sidebar of {_p}
+  wipe {_p}'s sidebar
 
-  set {_anim} to "%animToken()%"
+  set {_anim} to animToken()
   set {_title} to cc("&a%{_anim}% &fStats")
-  set name of sidebar of {_p} to {_title}
+  set name of {_p}'s sidebar to {_title}
 
   set {_u} to uid({_p})
   if {coins::%{_u}%} is not set:
@@ -431,14 +431,14 @@ function applyScoreboard(p: player):
   set {_need} to requiredXP({_lvl})
 
   # Lines MUST be unique; use tiny trailing color codes for uniqueness
-  set score cc("&8 ") in sidebar of {_p} to 8
-  set score cc("&aCoins: &f%{_coins}%&r") in sidebar of {_p} to 7
-  set score cc("&aGems:  &f%{_gems}%&r&0") in sidebar of {_p} to 6
-  set score cc("&8  ") in sidebar of {_p} to 5
-  set score cc("&7Level: &f%levelBracketRaw({_p})%&r&1") in sidebar of {_p} to 4
-  set score cc("&7XP: &f%{_xp}%&7/&f%{_need}%&r&2") in sidebar of {_p} to 3
-  set score cc("&8   ") in sidebar of {_p} to 2
-  set score cc("&7Online: &a%size of all players%&r&3") in sidebar of {_p} to 1
+  set score cc("&8 ") in {_p}'s sidebar to 8
+  set score cc("&aCoins: &f%{_coins}%&r") in {_p}'s sidebar to 7
+  set score cc("&aGems:  &f%{_gems}%&r&0") in {_p}'s sidebar to 6
+  set score cc("&8  ") in {_p}'s sidebar to 5
+  set score cc("&7Level: &f%levelBracketRaw({_p})%&r&1") in {_p}'s sidebar to 4
+  set score cc("&7XP: &f%{_xp}%&7/&f%{_need}%&r&2") in {_p}'s sidebar to 3
+  set score cc("&8   ") in {_p}'s sidebar to 2
+  set score cc("&7Online: &a%size of all players%&r&3") in {_p}'s sidebar to 1
 
 # --------------------------
 #  DEFAULT DATA (TAB LOOK)
