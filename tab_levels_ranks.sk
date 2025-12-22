@@ -7,6 +7,17 @@ options:
   tab_update_seconds: 2
   sb_update_seconds: 2
   anim_seconds: 1
+  actionbar_update_seconds: 1
+
+  # Custom RPG resources
+  health_base: 100
+  health_per_level: 5
+  health_regen: 2
+  mana_base: 100
+  mana_per_level: 4
+  mana_regen: 3
+
+  actionbar_resources_format: &c❤ {health}/{max_health} &8• &b✦ {mana}/{max_mana}
 
   chat_separator: &8 » &f
 
@@ -18,6 +29,10 @@ options:
 
   # Action bar XP: ONLY gain + remaining
   actionbar_xp_format: &a+{gain} XP &8| &7{remain} XP to next
+
+  # Level up rewards
+  levelup_coin_base: 25
+  levelup_coin_per_level: 10
 
   # XP scaling
   xp_base: 50
@@ -32,6 +47,10 @@ options:
 
   # Currency (optional: you can later add rewards)
   admin_perm: tablevels.admin
+
+  # GUI
+  level_gui_title: "&8Skyblock Progression"
+  level_gui_bar_length: 20
 
   # Server display
   server_name: "&a&lMyServer"
@@ -62,6 +81,58 @@ function firstColorCode(t: text) :: text:
         return "&%{_c}%"
     add 1 to {_i}
   return "&f"
+
+# --------------------------
+#  RPG RESOURCES
+# --------------------------
+
+function maxHealth(p: player) :: number:
+  set {_lvl} to getLevel({_p})
+  set {_max} to {@health_base} + (({_lvl} - 1) * {@health_per_level})
+  return {_max}
+
+function maxMana(p: player) :: number:
+  set {_lvl} to getLevel({_p})
+  set {_max} to {@mana_base} + (({_lvl} - 1) * {@mana_per_level})
+  return {_max}
+
+function getHealth(p: player) :: number:
+  set {_u} to uid({_p})
+  if {rpg_health::%{_u}%} is not set:
+    set {rpg_health::%{_u}%} to maxHealth({_p})
+  return {rpg_health::%{_u}%}
+
+function getMana(p: player) :: number:
+  set {_u} to uid({_p})
+  if {rpg_mana::%{_u}%} is not set:
+    set {rpg_mana::%{_u}%} to maxMana({_p})
+  return {rpg_mana::%{_u}%}
+
+function setHealth(p: player, amount: number):
+  set {_max} to maxHealth({_p})
+  set {_new} to {_amount}
+  if {_new} > {_max}:
+    set {_new} to {_max}
+  if {_new} < 0:
+    set {_new} to 0
+  set {rpg_health::%uid({_p})%} to {_new}
+
+function setMana(p: player, amount: number):
+  set {_max} to maxMana({_p})
+  set {_new} to {_amount}
+  if {_new} > {_max}:
+    set {_new} to {_max}
+  if {_new} < 0:
+    set {_new} to 0
+  set {rpg_mana::%uid({_p})%} to {_new}
+
+function regenResources(p: player):
+  setHealth({_p}, getHealth({_p}) + {@health_regen})
+  setMana({_p}, getMana({_p}) + {@mana_regen})
+
+function levelCoinReward(lvl: number) :: number:
+  set {_lvl} to {_lvl} parsed as number
+  return {@levelup_coin_base} + ({_lvl} * {@levelup_coin_per_level})
 
 # Level color changes every 100 levels
 function levelColorCode(lvl: number) :: text:
@@ -104,6 +175,21 @@ function animToken() :: text:
   if {anim::step} = 3:
     return "&a◆"
   return "&2◆"
+
+function buildProgressBar(progress: number, length: number) :: text:
+  set {_bar} to ""
+  set {_filled} to floor(({_progress} / 100) * {_length})
+  if {_filled} < 0:
+    set {_filled} to 0
+  if {_filled} > {_length}:
+    set {_filled} to {_length}
+
+  loop {_length} times:
+    if loop-number <= {_filled}:
+      set {_bar} to "%{_bar}%&a▮"
+    else:
+      set {_bar} to "%{_bar}%&8▮"
+  return {_bar}
 
 # --------------------------
 #  LEVEL SYSTEM
@@ -180,8 +266,10 @@ function getRankName(p: player) :: text:
 function rankPrefixRaw(p: player) :: text:
   set {_r} to getRankName({_p})
   if {ranks::%{_r}%::prefix} is set:
-    return "%{ranks::%{_r}%::prefix}%{@rank_suffix_space}"
-  return "%{ranks::%defaultRank()%::prefix}%{@rank_suffix_space}"
+    set {_pref} to {ranks::%{_r}%::prefix}
+  else:
+    set {_pref} to {ranks::%defaultRank()%::prefix}
+  return "%{_pref}%{@rank_suffix_space}%"
 
 # Rank before level
 function fullPrefixRaw(p: player) :: text:
@@ -195,6 +283,25 @@ function nameColorFromRank(p: player) :: text:
 #  ACTION BAR XP DISPLAY
 # --------------------------
 
+function resourceActionbarText(p: player) :: text:
+  set {_h} to round getHealth({_p})
+  set {_mh} to maxHealth({_p})
+  set {_m} to round getMana({_p})
+  set {_mm} to maxMana({_p})
+
+  set {_mText} to "{@actionbar_resources_format}"
+  replace all "{health}" with "%{_h}%" in {_mText}
+  replace all "{max_health}" with "%{_mh}%" in {_mText}
+  replace all "{mana}" with "%{_m}%" in {_mText}
+  replace all "{max_mana}" with "%{_mm}%" in {_mText}
+  return {_mText}
+
+function showResourceActionbar(p: player):
+  set {_u} to uid({_p})
+  if {actionbar::lock::%{_u}%} is set:
+    stop
+  send action bar cc(resourceActionbarText({_p})) to {_p}
+
 function showXPGainActionbar(p: player, gain: number):
   set {_lvl} to getLevel({_p})
   set {_xp} to getXP({_p})
@@ -206,7 +313,11 @@ function showXPGainActionbar(p: player, gain: number):
   set {_m} to "{@actionbar_xp_format}"
   replace all "{gain}" with "%{_gain}%" in {_m}
   replace all "{remain}" with "%{_remain}%" in {_m}
+  set {actionbar::lock::%uid({_p})%} to true
   send action bar cc({_m}) to {_p}
+  wait 2 seconds
+  delete {actionbar::lock::%uid({_p})%}
+  showResourceActionbar({_p})
 
 # --------------------------
 #  XP CORE
@@ -227,7 +338,16 @@ function addXP(p: player, amount: number):
   while {xp::%{_u}%} >= requiredXP({lvl::%{_u}%}):
     remove requiredXP({lvl::%{_u}%}) from {xp::%{_u}%}
     add 1 to {lvl::%{_u}%}
-    send cc("&aLevel up! &7Now &f%levelBracketRaw({_p})%&7.") to {_p}
+    set {_newLvl} to {lvl::%{_u}%}
+    set {_reward} to levelCoinReward({_newLvl})
+    if {coins::%{_u}%} is not set:
+      set {coins::%{_u}%} to 0
+    add {_reward} to {coins::%{_u}%}
+    setHealth({_p}, maxHealth({_p}))
+    setMana({_p}, maxMana({_p}))
+    applyScoreboard({_p})
+    send cc("&6&lLEVEL UP! &7You reached %levelBracketRaw({_p})%&7.") to {_p}
+    send cc(" &8» &aRewards: &e+%{_reward}% Coins &8| &cFull Health &8| &bFull Mana") to {_p}
 
   showXPGainActionbar({_p}, {_amount})
 
@@ -251,10 +371,10 @@ function applyTab(p: player):
     else:
       set {_footer} to "%{_footer}%%nl%%loop-value%"
 
-  set {_pname} to name of {_p}
-  set {_world} to "%world of {_p}%"
-  set {_online} to "%size of all players%"
-  set {_anim} to "%animToken()%"
+    set {_pname} to name of {_p}
+    set {_world} to "%world of {_p}%"
+    set {_online} to "%size of all players%"
+    set {_anim} to animToken()
 
   replace all "{anim}" with {_anim} in {_header}
   replace all "{player}" with "%{_pname}%" in {_header}
@@ -295,7 +415,7 @@ function applyScoreboard(p: player):
   # Some Skript builds use "wipe sidebar of player" + "set score ... in sidebar of player"
   wipe sidebar of {_p}
 
-  set {_anim} to "%animToken()%"
+  set {_anim} to animToken()
   set {_title} to cc("&a%{_anim}% &fStats")
   set name of sidebar of {_p} to {_title}
 
@@ -313,14 +433,14 @@ function applyScoreboard(p: player):
   set {_need} to requiredXP({_lvl})
 
   # Lines MUST be unique; use tiny trailing color codes for uniqueness
-  set score cc("&8 ") in sidebar of {_p} to 8
-  set score cc("&aCoins: &f%{_coins}%&r") in sidebar of {_p} to 7
-  set score cc("&aGems:  &f%{_gems}%&r&0") in sidebar of {_p} to 6
-  set score cc("&8  ") in sidebar of {_p} to 5
-  set score cc("&7Level: &f%levelBracketRaw({_p})%&r&1") in sidebar of {_p} to 4
-  set score cc("&7XP: &f%{_xp}%&7/&f%{_need}%&r&2") in sidebar of {_p} to 3
-  set score cc("&8   ") in sidebar of {_p} to 2
-  set score cc("&7Online: &a%size of all players%&r&3") in sidebar of {_p} to 1
+  set score 8 in sidebar of {_p} to cc("&8 ")
+  set score 7 in sidebar of {_p} to cc("&aCoins: &f%{_coins}%&r")
+  set score 6 in sidebar of {_p} to cc("&aGems:  &f%{_gems}%&r&0")
+  set score 5 in sidebar of {_p} to cc("&8  ")
+  set score 4 in sidebar of {_p} to cc("&7Level: &f%levelBracketRaw({_p})%&r&1")
+  set score 3 in sidebar of {_p} to cc("&7XP: &f%{_xp}%&7/&f%{_need}%&r&2")
+  set score 2 in sidebar of {_p} to cc("&8   ")
+  set score 1 in sidebar of {_p} to cc("&7Online: &a%size of all players%&r&3")
 
 # --------------------------
 #  DEFAULT DATA (TAB LOOK)
@@ -393,8 +513,11 @@ every {@anim_seconds} seconds:
 # --------------------------
 
 on join:
+  setHealth(player, maxHealth(player))
+  setMana(player, maxMana(player))
   applyTab(player)
   applyScoreboard(player)
+  showResourceActionbar(player)
 
 every {@tab_update_seconds} seconds:
   loop all players:
@@ -403,6 +526,11 @@ every {@tab_update_seconds} seconds:
 every {@sb_update_seconds} seconds:
   loop all players:
     applyScoreboard(loop-player)
+
+every {@actionbar_update_seconds} seconds:
+  loop all players:
+    regenResources(loop-player)
+    showResourceActionbar(loop-player)
 
 # --------------------------
 #  XP EVENTS
@@ -451,6 +579,41 @@ command /mystats:
     if {_remain} < 0:
       set {_remain} to 0
     send cc("&7Level: &f%levelBracketRaw(player)% &8| &7XP: &f%{_xp}%&7/&f%{_need}% &8| &7Next in &f%{_remain}%") to player
+
+function openLevelMenu(p: player):
+  set {_lvl} to getLevel({_p})
+  set {_xp} to getXP({_p})
+  set {_need} to requiredXP({_lvl})
+  if {_need} <= 0:
+    set {_need} to 1
+  set {_progress} to floor(({_xp} / {_need}) * 100)
+  if {_progress} > 100:
+    set {_progress} to 100
+  if {_progress} < 0:
+    set {_progress} to 0
+
+  set {_bar} to buildProgressBar({_progress}, {@level_gui_bar_length})
+  set {_title} to cc("{@level_gui_title}")
+  open virtual chest inventory with size 54 named {_title} to {_p}
+  wait 2 ticks
+
+  set {_slot} to 0
+  while {_slot} <= 53:
+    format slot {_slot} of {_p} with gray stained glass pane named " " to do nothing
+    add 1 to {_slot}
+
+  format slot 13 of {_p} with nether star named cc("&a&lYour Level") with lore cc("&7Level: &f%levelBracketRaw({_p})%"), cc("&7Progress: &f%{_progress}%&7%"), cc("&a%{_bar}%"), cc("&7XP: &f%{_xp}%&7/&f%{_need}%") to do nothing
+  format slot 29 of {_p} with red dye named cc("&cHealth") with lore cc("&7Max: &f%maxHealth({_p})%"), cc("&7Current: &f%getHealth({_p})%") to do nothing
+  format slot 31 of {_p} with gold ingot named cc("&6Coins") with lore cc("&7Balance: &f%getCoins({_p})%"), cc("&7Next reward: &e+%levelCoinReward({_lvl} + 1)% Coins") to do nothing
+  format slot 33 of {_p} with light blue dye named cc("&bMana") with lore cc("&7Max: &f%maxMana({_p})%"), cc("&7Current: &f%getMana({_p})%") to do nothing
+
+command /levelmenu:
+  trigger:
+    openLevelMenu(player)
+
+command /levelgui:
+  trigger:
+    openLevelMenu(player)
 
 # Coins / Gems admin
 command /coinsgive <player> <number>:
