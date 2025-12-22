@@ -75,7 +75,7 @@ function firstColorCode(t: text) :: text:
   set {_s} to {_t}
   set {_i} to 1
   while {_i} <= length of {_s}:
-    if character {_i} of {_s} = "&":
+    if character {_i} of {_s} is "&":
       if {_i} + 1 <= length of {_s}:
         set {_c} to character {_i + 1} of {_s}
         return "&%{_c}%"
@@ -221,17 +221,17 @@ function getRankName(p: player) :: text:
     return {rank::%{_u}%}
   return {_def}
 
-  function rankPrefixRaw(p: player) :: text:
-    set {_r} to getRankName({_p})
-    set {_pref} to ""
+function rankPrefixRaw(p: player) :: text:
+  set {_r} to getRankName({_p})
+  set {_pref} to ""
 
-    if {ranks::%{_r}%::prefix} is set:
-      set {_pref} to {ranks::%{_r}%::prefix}
-    else:
-      set {_def} to defaultRank()
-      set {_pref} to {ranks::%{_def}%::prefix}
+  if {ranks::%{_r}%::prefix} is set:
+    set {_pref} to {ranks::%{_r}%::prefix}
+  else:
+    set {_def} to defaultRank()
+    set {_pref} to {ranks::%{_def}%::prefix}
 
-    return "%{_pref}%{@rank_suffix_space}%"
+  return "%{_pref}%{@rank_suffix_space}"
 
 # Rank before level
 function fullPrefixRaw(p: player) :: text:
@@ -373,13 +373,13 @@ function getGems(p: player) :: number:
     set {gems::%{_u}%} to 0
   return {gems::%{_u}%}
 
-  function applyScoreboard(p: player):
-    # Some Skript builds use "wipe sidebar of player" + "set score ... in sidebar of player"
-    wipe sidebar of {_p}
+function applyScoreboard(p: player):
+  # Some Skript builds use "wipe sidebar of player" + "set score ... in sidebar of player"
+  wipe sidebar of {_p}
 
-    set {_anim} to animToken()
-    set {_title} to cc("&a%{_anim}% &fStats")
-    set name of sidebar of {_p} to {_title}
+  set {_anim} to animToken()
+  set {_title} to cc("&a%{_anim}% &fStats")
+  set name of sidebar of {_p} to {_title}
 
   set {_u} to uid({_p})
   if {coins::%{_u}%} is not set:
@@ -542,7 +542,7 @@ command /mystats:
       set {_remain} to 0
     send cc("&7Level: &f%levelBracketRaw(player)% &8| &7XP: &f%{_xp}%&7/&f%{_need}% &8| &7Next in &f%{_remain}%") to player
 
-  function openLevelMenu(p: player):
+function openLevelMenu(p: player):
   set {_lvl} to getLevel({_p})
   set {_xp} to getXP({_p})
   set {_need} to requiredXP({_lvl})
@@ -554,9 +554,9 @@ command /mystats:
   if {_progress} < 0:
     set {_progress} to 0
 
-    set {_bar} to buildProgressBar({_progress}, {@level_gui_bar_length})
-    set {_title} to cc("{@level_gui_title}")
-    open chest inventory with size 54 named {_title} to {_p}
+  set {_bar} to buildProgressBar({_progress}, {@level_gui_bar_length})
+  set {_title} to cc("{@level_gui_title}")
+  open chest inventory with size 54 named {_title} to {_p}
   wait 2 ticks
 
   loop 0 to 53:
