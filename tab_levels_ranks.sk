@@ -53,7 +53,7 @@ options:
   level_gui_bar_length: 20
 
   # Server display
-  server_name: &a&lMyServer
+  server_name: "&a&lMyServer"
 
 # --------------------------
 #  UTIL
@@ -75,7 +75,7 @@ function firstColorCode(t: text) :: text:
   set {_s} to {_t}
   set {_i} to 1
   while {_i} <= length of {_s}:
-    if character {_i} of {_s} = "&":
+    if character {_i} of {_s} is "&":
       if {_i} + 1 <= length of {_s}:
         set {_c} to character {_i + 1} of {_s}
         return "&%{_c}%"
@@ -594,10 +594,8 @@ function openLevelMenu(p: player):
   open virtual chest inventory with size 54 named cc("{@level_gui_title}") to {_p}
   wait 2 ticks
 
-  set {_slot} to 0
-  while {_slot} <= 53:
-    format slot {_slot} of {_p} with gray stained glass pane named " " to do nothing
-    add 1 to {_slot}
+  loop 0 to 53:
+    format slot loop-number of {_p} with gray stained glass pane named " " to do nothing
 
   format slot 13 of {_p} with nether star named cc("&a&lYour Level") with lore cc("&7Level: &f%levelBracketRaw({_p})%"), cc("&7Progress: &f%{_progress}%&7%"), cc("&a%{_bar}%"), cc("&7XP: &f%{_xp}%&7/&f%{_need}%") to do nothing
   format slot 29 of {_p} with red dye named cc("&cHealth") with lore cc("&7Max: &f%maxHealth({_p})%"), cc("&7Current: &f%getHealth({_p})%") to do nothing
