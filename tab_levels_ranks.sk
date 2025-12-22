@@ -1,0 +1,576 @@
+# =========================================================
+#  TAB + LEVELS + RANKS (No-addons required)
+#  File: tab_levels_ranks.sk
+# =========================================================
+
+options:
+  tab_update_seconds: 2
+  chat_separator: &8 » &f
+
+  # Level is JUST brackets now (no "Lv.")
+  level_bracket_format: &8[&f{level}&8]&r
+  rank_suffix_space:  &r&7
+
+  # Action bar XP message
+  actionbar_xp_format: &a+{gain} XP &8| &7{rank} {level} &8({xp}/{need})
+
+  # XP scaling
+  xp_base: 50
+  xp_linear: 25
+  xp_power: 2
+  xp_exponent: 3
+
+  # XP gains
+  xp_gain_mining: 4
+  xp_gain_fishing: 8
+  xp_gain_combat: 10
+
+  admin_perm: tablevels.admin
+
+# --------------------------
+#  UTIL
+# --------------------------
+
+function cc(t: text) :: text:
+  return colored {_t}
+
+function uid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+function normMat(t: text) :: text:
+  set {_x} to lowercase {_t}
+  replace all "_" with " " in {_x}
+  return {_x}
+
+# --------------------------
+#  LEVEL SYSTEM
+# --------------------------
+
+function getLevel(p: player) :: number:
+  set {_u} to uid({_p})
+  if {lvl::%{_u}%} is not set:
+    set {lvl::%{_u}%} to 1
+  return {lvl::%{_u}%}
+
+function getXP(p: player) :: number:
+  set {_u} to uid({_p})
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  return {xp::%{_u}%}
+
+function requiredXP(lvl: number) :: number:
+  set {_lvl} to {_lvl} parsed as number
+
+  set {_pow} to 1
+  loop {@xp_power} times:
+    set {_pow} to {_pow} * {_lvl}
+
+  set {_need} to {@xp_base} + ({_lvl} * {@xp_linear}) + ({_pow} * {@xp_exponent})
+  return {_need}
+
+function levelBracketRaw(p: player) :: text:
+  set {_lvl} to getLevel({_p})
+  set {_s} to "{@level_bracket_format}"
+  replace all "{level}" with "%{_lvl}%" in {_s}
+  return {_s}
+
+# --------------------------
+#  RANK SYSTEM
+# --------------------------
+
+function rankMode() :: text:
+  if {rankmode} is not set:
+    set {rankmode} to "stored"
+  return {rankmode}
+
+function defaultRank() :: text:
+  if {rank_default} is not set:
+    set {rank_default} to "member"
+  return {rank_default}
+
+function getRankName(p: player) :: text:
+  set {_mode} to rankMode()
+  set {_def} to defaultRank()
+
+  if {_mode} is "permission":
+    set {_best} to {_def}
+    set {_bestPrio} to -999999
+
+    loop {ranks::list::*}:
+      set {_r} to loop-value
+      set {_perm} to {ranks::%{_r}%::perm}
+      if {_perm} is set:
+        if {_p} has permission {_perm}:
+          set {_prio} to {ranks::%{_r}%::priority}
+          if {_prio} is not set:
+            set {_prio} to 0
+          if {_prio} > {_bestPrio}:
+            set {_bestPrio} to {_prio}
+            set {_best} to {_r}
+    return {_best}
+
+  set {_u} to uid({_p})
+  if {rank::%{_u}%} is set:
+    return {rank::%{_u}%}
+  return {_def}
+
+function rankPrefixRaw(p: player) :: text:
+  set {_r} to getRankName({_p})
+  if {ranks::%{_r}%::prefix} is set:
+    return "%{ranks::%{_r}%::prefix}%{@rank_suffix_space}"
+  return "%{ranks::%defaultRank()%::prefix}%{@rank_suffix_space}"
+
+# Rank before Level now
+function fullPrefixRaw(p: player) :: text:
+  return "%rankPrefixRaw({_p})% %levelBracketRaw({_p})%"
+
+# --------------------------
+#  ACTION BAR XP DISPLAY
+# --------------------------
+
+function showXPGainActionbar(p: player, gain: number):
+  set {_rank} to getRankName({_p})
+  set {_lvl} to getLevel({_p})
+  set {_xp} to getXP({_p})
+  set {_need} to requiredXP({_lvl})
+
+  set {_lvlBr} to levelBracketRaw({_p})
+  set {_rankPref} to rankPrefixRaw({_p})
+
+  # Build message from option string
+  set {_m} to "{@actionbar_xp_format}"
+  replace all "{gain}" with "%{_gain}%" in {_m}
+  replace all "{rank}" with "%{_rankPref}%" in {_m}
+  replace all "{level}" with "%{_lvlBr}%" in {_m}
+  replace all "{xp}" with "%{_xp}%" in {_m}
+  replace all "{need}" with "%{_need}%" in {_m}
+
+  send action bar cc({_m}) to {_p}
+
+# --------------------------
+#  XP CORE (with scaling + action bar)
+# --------------------------
+
+function addXP(p: player, amount: number):
+  if {_amount} <= 0:
+    stop
+
+  set {_u} to uid({_p})
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  if {lvl::%{_u}%} is not set:
+    set {lvl::%{_u}%} to 1
+
+  add {_amount} to {xp::%{_u}%}
+
+  # Level-up loop
+  while {xp::%{_u}%} >= requiredXP({lvl::%{_u}%}):
+    remove requiredXP({lvl::%{_u}%}) from {xp::%{_u}%}
+    add 1 to {lvl::%{_u}%}
+    send cc("&aLevel up! &7You are now &f%levelBracketRaw({_p})%&7.") to {_p}
+
+  # Show action bar after final level is settled
+  showXPGainActionbar({_p}, {_amount})
+
+# --------------------------
+#  TAB APPLY (simplified look)
+# --------------------------
+
+function applyTab(p: player):
+  set {_header} to ""
+  loop {tab::header::*}:
+    if {_header} is "":
+      set {_header} to loop-value
+    else:
+      set {_header} to "%{_header}%%nl%%loop-value%"
+
+  set {_footer} to ""
+  loop {tab::footer::*}:
+    if {_footer} is "":
+      set {_footer} to loop-value
+    else:
+      set {_footer} to "%{_footer}%%nl%%loop-value%"
+
+  set {_pname} to name of {_p}
+  set {_rank} to getRankName({_p})
+  set {_lvl} to "%getLevel({_p})%"
+  set {_world} to "%world of {_p}%"
+  set {_online} to "%size of all players%"
+
+  replace all "{player}" with "%{_pname}%" in {_header}
+  replace all "{rank}" with "%{_rank}%" in {_header}
+  replace all "{level}" with "%{_lvl}%" in {_header}
+  replace all "{world}" with "%{_world}%" in {_header}
+  replace all "{online}" with "%{_online}%" in {_header}
+
+  replace all "{player}" with "%{_pname}%" in {_footer}
+  replace all "{rank}" with "%{_rank}%" in {_footer}
+  replace all "{level}" with "%{_lvl}%" in {_footer}
+  replace all "{world}" with "%{_world}%" in {_footer}
+  replace all "{online}" with "%{_online}%" in {_footer}
+
+  set {_p}'s tab list header to cc({_header})
+  set {_p}'s tab list footer to cc({_footer})
+
+  # Rank before level in tab list name
+  set {_pref} to cc(fullPrefixRaw({_p}))
+  set {_p}'s tab list name to "%{_pref}% &f%name of {_p}%"
+
+# --------------------------
+#  DEFAULT DATA (simplified tab header/footer)
+# --------------------------
+
+on load:
+  # Simple, clean tab layout (2 lines header + 1 line footer)
+  if {tab::header::1} is not set:
+    delete {tab::header::*}
+    set {tab::header::1} to "&f&lServer &8• &7Online: &f{online}"
+    set {tab::header::2} to "&7World: &f{world}"
+
+  if {tab::footer::1} is not set:
+    delete {tab::footer::*}
+    set {tab::footer::1} to "&7Use &f/mystats &7to view progress"
+
+  if {rankmode} is not set:
+    set {rankmode} to "stored"
+  if {rank_default} is not set:
+    set {rank_default} to "member"
+
+  if {ranks::list::1} is not set:
+    delete {ranks::list::*}
+
+    add "member" to {ranks::list::*}
+    set {ranks::member::priority} to 0
+    set {ranks::member::prefix} to "&7Member"
+
+    add "vip" to {ranks::list::*}
+    set {ranks::vip::priority} to 10
+    set {ranks::vip::prefix} to "&6VIP"
+    set {ranks::vip::perm} to "rank.vip"
+
+    add "mod" to {ranks::list::*}
+    set {ranks::mod::priority} to 50
+    set {ranks::mod::prefix} to "&2Mod"
+    set {ranks::mod::perm} to "rank.mod"
+
+    add "admin" to {ranks::list::*}
+    set {ranks::admin::priority} to 100
+    set {ranks::admin::prefix} to "&cAdmin"
+    set {ranks::admin::perm} to "rank.admin"
+
+  if {xp::mine::blocks::1} is not set:
+    delete {xp::mine::blocks::*}
+    add "stone" to {xp::mine::blocks::*}
+    add "deepslate" to {xp::mine::blocks::*}
+    add "coal ore" to {xp::mine::blocks::*}
+    add "iron ore" to {xp::mine::blocks::*}
+    add "gold ore" to {xp::mine::blocks::*}
+    add "diamond ore" to {xp::mine::blocks::*}
+    add "ancient debris" to {xp::mine::blocks::*}
+
+# --------------------------
+#  XP EVENTS
+# --------------------------
+
+on join:
+  applyTab(player)
+
+every {@tab_update_seconds} seconds:
+  loop all players:
+    applyTab(loop-player)
+
+on break:
+  if gamemode of player is creative:
+    stop
+  set {_mat} to normMat("%type of event-block%")
+  if {_mat} is in {xp::mine::blocks::*}:
+    addXP(player, {@xp_gain_mining})
+
+on fishing state change:
+  if event-fishing state is fish caught:
+    if gamemode of player is creative:
+      stop
+    addXP(player, {@xp_gain_fishing})
+
+on death:
+  if attacker is a player:
+    if victim is a player:
+      stop
+    if gamemode of attacker is creative:
+      stop
+    addXP(attacker, {@xp_gain_combat})
+
+# --------------------------
+#  CHAT FORMAT (rank before level, level is [12])
+# --------------------------
+
+on chat:
+  set {_pref} to cc(fullPrefixRaw(player))
+  set chat format to "%{_pref}% &f[player]{@chat_separator}[message]"
+
+# =========================================================
+#  COMMANDS (argument 1/2/3/4 compatible)
+# =========================================================
+
+command /tabbar <text> [<text>] [<number>] [<text>]:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    if argument 1 is "show":
+      send "&7Header lines:" to player
+      loop {tab::header::*}:
+        send cc("&8- &f%loop-index%&8: &f%loop-value%") to player
+      send "&7Footer lines:" to player
+      loop {tab::footer::*}:
+        send cc("&8- &f%loop-index%&8: &f%loop-value%") to player
+      stop
+
+    if argument 1 is "header":
+      if argument 2 is not set:
+        send "&cUse: /tabbar header <add|set|clear> ..." to player
+        stop
+
+      if argument 2 is "clear":
+        delete {tab::header::*}
+        send "&aCleared tab header lines." to player
+        stop
+
+      if argument 2 is "add":
+        if argument 4 is not set:
+          send "&cUse: /tabbar header add <text>" to player
+          stop
+        add argument 4 to {tab::header::*}
+        send "&aAdded header line." to player
+        stop
+
+      if argument 2 is "set":
+        if argument 3 is not set:
+          send "&cUse: /tabbar header set <index> <text>" to player
+          stop
+        if argument 4 is not set:
+          send "&cUse: /tabbar header set <index> <text>" to player
+          stop
+        if argument 3 < 1:
+          send "&cIndex must be 1 or higher." to player
+          stop
+        set {tab::header::%argument 3%} to argument 4
+        send "&aSet header line &f%argument 3%&a." to player
+        stop
+
+    if argument 1 is "footer":
+      if argument 2 is not set:
+        send "&cUse: /tabbar footer <add|set|clear> ..." to player
+        stop
+
+      if argument 2 is "clear":
+        delete {tab::footer::*}
+        send "&aCleared tab footer lines." to player
+        stop
+
+      if argument 2 is "add":
+        if argument 4 is not set:
+          send "&cUse: /tabbar footer add <text>" to player
+          stop
+        add argument 4 to {tab::footer::*}
+        send "&aAdded footer line." to player
+        stop
+
+      if argument 2 is "set":
+        if argument 3 is not set:
+          send "&cUse: /tabbar footer set <index> <text>" to player
+          stop
+        if argument 4 is not set:
+          send "&cUse: /tabbar footer set <index> <text>" to player
+          stop
+        if argument 3 < 1:
+          send "&cIndex must be 1 or higher." to player
+          stop
+        set {tab::footer::%argument 3%} to argument 4
+        send "&aSet footer line &f%argument 3%&a." to player
+        stop
+
+    send "&cUnknown usage. Try: /tabbar show" to player
+
+
+command /mineblocks <text> [<text>]:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    if argument 1 is "list":
+      send "&7Mining XP blocks:" to player
+      loop {xp::mine::blocks::*}:
+        send "&8- &f%loop-value%" to player
+      stop
+
+    if argument 1 is "add":
+      if argument 2 is not set:
+        send "&cUse: /mineblocks add <material>" to player
+        stop
+      set {_m} to normMat(argument 2)
+      if {_m} is in {xp::mine::blocks::*}:
+        send "&eAlready in list: &f%{_m}%" to player
+        stop
+      add {_m} to {xp::mine::blocks::*}
+      send "&aAdded: &f%{_m}%" to player
+      stop
+
+    if argument 1 is "remove":
+      if argument 2 is not set:
+        send "&cUse: /mineblocks remove <material>" to player
+        stop
+      set {_m} to normMat(argument 2)
+      remove {_m} from {xp::mine::blocks::*}
+      send "&aRemoved: &f%{_m}%" to player
+      stop
+
+    send "&cUse: /mineblocks <list|add|remove>" to player
+
+
+command /levelset <player> <number>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_u} to uid(argument 1)
+    set {lvl::%{_u}%} to argument 2
+    if {xp::%{_u}%} is not set:
+      set {xp::%{_u}%} to 0
+    send "&aSet level of &f%argument 1% &ato &f[%argument 2%]&a." to player
+    applyTab(argument 1)
+
+command /xpadd <player> <number>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    addXP(argument 1, argument 2)
+    applyTab(argument 1)
+    send "&aAdded &f%argument 2% &aXP to &f%argument 1%&a." to player
+
+command /mystats:
+  trigger:
+    set {_lvl} to getLevel(player)
+    set {_xp} to getXP(player)
+    set {_need} to requiredXP({_lvl})
+    send cc("&7Rank: &f%rankPrefixRaw(player)%") to player
+    send cc("&7Level: &f%levelBracketRaw(player)% &8| &7XP: &f%{_xp}%&7/&f%{_need}%") to player
+
+
+command /rankmode <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_m} to lowercase argument 1
+    if {_m} is "stored":
+      set {rankmode} to "stored"
+      send "&aRank mode set to &fstored&a." to player
+      stop
+    if {_m} is "permission":
+      set {rankmode} to "permission"
+      send "&aRank mode set to &fpermission&a." to player
+      stop
+    send "&cUse: /rankmode <stored|permission>" to player
+
+
+command /ranklist:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    send "&7Ranks:" to player
+    loop {ranks::list::*}:
+      set {_r} to loop-value
+      send cc("&8- &f%{_r}% &7(prio &f%{ranks::%{_r}%::priority}%&7) &8| &7prefix: &f%{ranks::%{_r}%::prefix}%") to player
+
+command /rankinfo <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_r} to argument 1
+    if {ranks::%{_r}%::prefix} is not set:
+      send "&cNo such rank: &f%{_r}%" to player
+      stop
+    send cc("&7Rank &f%{_r}%") to player
+    send cc("&7Priority: &f%{ranks::%{_r}%::priority}%") to player
+    send cc("&7Prefix: &f%{ranks::%{_r}%::prefix}%") to player
+    if {ranks::%{_r}%::perm} is set:
+      send cc("&7Permission: &f%{ranks::%{_r}%::perm}%") to player
+    else:
+      send "&7Permission: &8(none)" to player
+
+command /rankcreate <text> <number> <text> [<text>]:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_name} to argument 1
+    set {_prio} to argument 2
+    set {_prefix} to argument 3
+    set {_perm} to argument 4
+
+    if {ranks::%{_name}%::prefix} is set:
+      send "&cRank already exists: &f%{_name}%" to player
+      stop
+
+    add {_name} to {ranks::list::*}
+    set {ranks::%{_name}%::priority} to {_prio}
+    set {ranks::%{_name}%::prefix} to {_prefix}
+    if {_perm} is set:
+      set {ranks::%{_name}%::perm} to {_perm}
+
+    send cc("&aCreated rank &f%{_name}%&a.") to player
+
+command /rankdelete <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_name} to argument 1
+    if {ranks::%{_name}%::prefix} is not set:
+      send "&cNo such rank: &f%{_name}%" to player
+      stop
+    delete {ranks::%{_name}%::*}
+    remove {_name} from {ranks::list::*}
+    send "&aDeleted rank &f%{_name}%&a." to player
+
+command /rankset <player> <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    if rankMode() is not "stored":
+      send "&c/rankset only works in &fstored&c mode. Use /rankmode stored" to player
+      stop
+
+    set {_r} to argument 2
+    if {ranks::%{_r}%::prefix} is not set:
+      send "&cNo such rank: &f%{_r}%" to player
+      stop
+
+    set {_u} to uid(argument 1)
+    set {rank::%{_u}%} to {_r}
+    send "&aSet rank of &f%argument 1% &ato &f%{_r}%&a." to player
+    applyTab(argument 1)
+
+# =========================================================
+# OPTIONAL: TAB AUTOCOMPLETE
+# =========================================================
+# Skript tab completion support depends on version. If your Skript supports it,
+# you can uncomment + adjust these. If it errors, re-comment them.
+
+# command /tabbar <text> [<text>] [<number>] [<text>]:
+#   tab completer:
+#     if argument 1 is not set:
+#       set tab completions to "show", "header", "footer"
+#     else if argument 1 is "header" or argument 1 is "footer":
+#       if argument 2 is not set:
+#         set tab completions to "add", "set", "clear"
+
+# command /mineblocks <text> [<text>]:
+#   tab completer:
+#     if argument 1 is not set:
+#       set tab completions to "list", "add", "remove"
+
+# command /rankmode <text>:
+#   tab completer:
+#     if argument 1 is not set:
+#       set tab completions to "stored", "permission"
+
+# command /rankset <player> <text>:
+#   tab completer:
+#     if argument 2 is not set:
+#       set tab completions to {ranks::list::*}
