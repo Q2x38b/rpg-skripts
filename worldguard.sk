@@ -231,6 +231,8 @@ function wg_open_blocks_gui(p: player, wName: text):
 # ----------------------------
 
 command /wgperms [<text>]:
+  permission: {@wg_admin_perm}
+  permission message: &cNo permission.
   trigger:
     if wg_is_admin(player) is false:
       send wg_cc("&cNo permission.") to player
@@ -241,6 +243,8 @@ command /wgperms [<text>]:
     wg_open_perms_gui(player, {_wName})
 
 command /wgblocks [<text>]:
+  permission: {@wg_admin_perm}
+  permission message: &cNo permission.
   trigger:
     if wg_is_admin(player) is false:
       send wg_cc("&cNo permission.") to player

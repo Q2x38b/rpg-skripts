@@ -345,6 +345,7 @@ on inventory close:
     wait 1 tick
     eq_recalcStats(player)
     delete {equip::gui::%{_u}%}
+    delete {eqGuiOpen::%{_u}%}
 
 # Recalculate stats periodically and on armor changes
 every 5 seconds:
