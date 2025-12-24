@@ -187,11 +187,7 @@ function addXP(p: player, amt: number):
     stop
   if {_amt} <= 0:
     stop
-  # Default behavior: use shared XP storage for ranks/levels
-  set {_u} to "%uuid of {_p}%"
-  if {xp::%{_u}%} is not set:
-    set {xp::%{_u}%} to 0
-  add {_amt} to {xp::%{_u}%}
+  lr_addMiningXp({_p}, {_amt})
 
 function autoPickupEnabled(p: player) :: boolean:
   # Default behavior:

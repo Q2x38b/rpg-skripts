@@ -619,10 +619,7 @@ on break:
       set {_xpAmount} to 4
       if {wgblock::xp::%{_wName}%::%{_key}%} is set:
         set {_xpAmount} to {wgblock::xp::%{_wName}%::%{_key}%}
-      set {_u} to uuid of player
-      if {xp::%{_u}%} is not set:
-        set {xp::%{_u}%} to 0
-      add {_xpAmount} to {xp::%{_u}%}
+      lr_addMiningXp(player, {_xpAmount})
 
       # set placeholder immediately and again next tick (prevents "instant regen" / client rollback)
       if {_ph} is "air":
@@ -646,7 +643,7 @@ on break:
       
       if {wgregen::autopickup::%{_wName}%} is true:
         loop {_drops::*}:
-          set {_dropItem} to loop-value-1
+          set {_dropItem} to loop-value
           if {_fortuneMult} > 1:
             # Use custom mining drop function for fortune
             ms_spawnMultipliedDrop(player, {_dropItem}, {_loc}, {_fortuneMult}, true)
@@ -657,7 +654,7 @@ on break:
               drop {_dropItem} at {_loc}
       else:
         loop {_drops::*}:
-          set {_dropItem} to loop-value-1
+          set {_dropItem} to loop-value
           if {_fortuneMult} > 1:
             ms_spawnMultipliedDrop(player, {_dropItem}, {_loc}, {_fortuneMult}, false)
           else:
