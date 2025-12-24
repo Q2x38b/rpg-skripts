@@ -187,12 +187,11 @@ function addXP(p: player, amt: number):
     stop
   if {_amt} <= 0:
     stop
-  # Default behavior: vanilla EXP (safe / dependency-free)
-  set {_exp} to {_amt} parsed as integer
-  if {_exp} is set:
-    if {_exp} > 0:
-      set {_expVal} to {_exp}
-      execute console command "xp %{_expVal}L %name of {_p}%"
+  # Default behavior: use shared XP storage for ranks/levels
+  set {_u} to "%uuid of {_p}%"
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  add {_amt} to {xp::%{_u}%}
 
 function autoPickupEnabled(p: player) :: boolean:
   # Default behavior:
