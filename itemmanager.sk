@@ -1,0 +1,363 @@
+# =========================================================
+# Accessories + GiveItem (separate from tab_levels_ranks)
+# Standalone: does not call external functions (cc/uid/getXP/addXP). Integrates via shared variables + /levelxpadd.
+# =========================================================
+
+options:
+  admin_perm: tablevels.admin
+
+# --------------------------
+# Helpers
+# --------------------------
+
+function isAccSlot(n: number) :: boolean:
+  if {_n} is between 10 and 16:
+    return true
+  if {_n} is between 19 and 25:
+    return true
+  return false
+
+function isAccessoryItem(i: item) :: boolean:
+  if {_i} is not set:
+    return false
+  if {_i} is air:
+    return false
+  if lore of {_i} is not set:
+    return false
+  loop lore of {_i}:
+    if loop-value contains "Accessory":
+      return true
+  return false
+
+function hpBonusFromItem(i: item) :: number:
+  set {_b} to 0
+  if {_i} is not set:
+    return 0
+  if lore of {_i} is not set:
+    return 0
+  loop lore of {_i}:
+    set {_l} to loop-value
+    if {_l} contains "HP Bonus:":
+      set {_t} to {_l}
+      replace all "HP Bonus:" with "" in {_t}
+      replace all "+" with "" in {_t}
+      replace all " " with "" in {_t}
+      set {_b} to {_t} parsed as number
+      return {_b}
+  return 0
+
+function manaBonusFromItem(i: item) :: number:
+  set {_b} to 0
+  if {_i} is not set:
+    return 0
+  if lore of {_i} is not set:
+    return 0
+  loop lore of {_i}:
+    set {_l} to loop-value
+    if {_l} contains "Mana Bonus:":
+      set {_t} to {_l}
+      replace all "Mana Bonus:" with "" in {_t}
+      replace all "+" with "" in {_t}
+      replace all " " with "" in {_t}
+      set {_b} to {_t} parsed as number
+      return {_b}
+  return 0
+
+function recalcAccessoryBonuses(p: player):
+  set {_u} to "%uuid of {_p}%"
+  set {_hp} to 0
+  set {_mana} to 0
+  loop {accbag::%{_u}%::slot::*}:
+    set {_it} to loop-value
+    if {_it} is set:
+      if isAccessoryItem({_it}) is true:
+        add hpBonusFromItem({_it}) to {_hp}
+        add manaBonusFromItem({_it}) to {_mana}
+  set {accbonus::hp::%{_u}%} to {_hp}
+  set {accbonus::mana::%{_u}%} to {_mana}
+
+
+# --------------------------
+# XP Rune (tool-applied multiplier)
+# --------------------------
+function isXPRuneItem(i: item) :: boolean:
+  if {_i} is not set:
+    return false
+  if type of {_i} is not amethyst shard:
+    return false
+  if name of {_i} is set:
+    if uncolored name of {_i} is "XP Rune":
+      return true
+  return false
+
+function hasXPRuneOnTool(i: item) :: boolean:
+  if {_i} is not set:
+    return false
+  # Prefer lore marker (most reliable)
+  if lore of {_i} is set:
+    loop lore of {_i}:
+      if uncolored loop-value contains "XP Rune":
+        return true
+  # Fallback: name prefix [⋆]
+  if name of {_i} is set:
+    set {_n} to uncolored name of {_i}
+    if {_n} starts with "[⋆]":
+      return true
+    if {_n} starts with "[★]":
+      return true
+  return false
+
+function isEligibleRuneTarget(i: item) :: boolean:
+  if {_i} is not set:
+    return false
+  if {_i} is air:
+    return false
+  # Allow most tools + common combat/fishing items. Uses type-name checks for broad compatibility.
+  if {_i} is tool:
+    return true
+  set {_t} to "%type of {_i}%"
+  if {_t} contains "sword":
+    return true
+  if {_t} contains "bow":
+    return true
+  if {_t} contains "crossbow":
+    return true
+  if {_t} contains "trident":
+    return true
+  if {_t} contains "fishing rod":
+    return true
+  return false
+function applyXPRuneToTool(p: player, target: item) :: boolean:
+  if hasXPRuneOnTool({_target}) is true:
+    return false
+  if name of {_target} is set:
+    set {_base} to name of {_target}
+  else:
+    set {_base} to "%type of {_target}%"
+  set name of {_target} to "&8[&a⋆&8] %{_base}%"
+  # Add/append lore marker
+  if lore of {_target} is set:
+    add "&8XP Rune: &a1.75x" to lore of {_target}
+  else:
+    set lore of {_target} to "&8XP Rune: &a1.75x"
+  return true
+
+# --------------------------
+# Commands
+# --------------------------
+
+# Give custom items (future-proof entry point)
+command /giveitem <player> <text> [<number>]:
+  permission: {@admin_perm}
+  trigger:
+    set {_t} to lowercase argument 2
+    set {_p} to argument 1
+
+    # Default amount (used as stat amount)
+    set {_amt} to 10
+    if argument 3 is set:
+      set {_amt} to argument 3
+
+    # --- Test items ---
+    if {_t} is "testring":
+      set {_it} to iron nugget named "&fTest Ring"
+      set lore of {_it} to "Accessory" and "HP Bonus: 10"
+      give {_it} to {_p}
+      stop
+
+    if {_t} is "testcharm":
+      set {_it} to prismarine shard named "&bTest Charm"
+      set lore of {_it} to "Accessory" and "Mana Bonus: 5"
+      give {_it} to {_p}
+      stop
+
+    if {_t} is "testamulet":
+      set {_it} to amethyst shard named "&dTest Amulet"
+      set lore of {_it} to "Accessory" and "HP Bonus: 5" and "Mana Bonus: 5"
+      give {_it} to {_p}
+      stop
+
+    # --- Generic accessories ---
+    if {_t} is "accessory_hp":
+      set {_it} to redstone named "&cHP Accessory"
+      set lore of {_it} to "Accessory" and "HP Bonus: %{_amt}%"
+      give {_it} to {_p}
+      stop
+
+    if {_t} is "accessory_mana":
+      set {_it} to lapis lazuli named "&bMana Accessory"
+      set lore of {_it} to "Accessory" and "Mana Bonus: %{_amt}%"
+      give {_it} to {_p}
+      stop
+
+
+    if {_t} is "xprune":
+      set {_it} to amethyst shard named "&aXP Rune"
+      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
+      set {_count} to 1
+      if argument 3 is set:
+        set {_count} to argument 3
+      set amount of {_it} to {_count}
+      give {_it} to {_p}
+      stop
+    if {_t} is "rune_xp":
+      set {_it} to amethyst shard named "&aXP Rune"
+      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
+      set {_count} to 1
+      if argument 3 is set:
+        set {_count} to argument 3
+      set amount of {_it} to {_count}
+      give {_it} to {_p}
+      stop
+    if {_t} is "xprunerune":
+      set {_it} to amethyst shard named "&aXP Rune"
+      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
+      set {_count} to 1
+      if argument 3 is set:
+        set {_count} to argument 3
+      set amount of {_it} to {_count}
+      give {_it} to {_p}
+      stop
+    
+    # --- Hypixel-style Accessories ---
+    if {_t} is "necklace_speed":
+      set {_it} to gold nugget named "&6&lMining Speed Necklace"
+      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &aMining Speed&7." and "&7" and "&aMining Speed: &a+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
+      give {_it} to {_p}
+      stop
+    
+    if {_t} is "ring_fortune":
+      set {_it} to emerald named "&a&lMining Fortune Ring"
+      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &bMining Fortune&7." and "&7" and "&bMining Fortune: &b+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
+      give {_it} to {_p}
+      stop
+    
+    if {_t} is "talisman_hp":
+      set {_it} to redstone named "&c&lHealth Talisman"
+      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &cHealth&7." and "&7" and "&cHealth: &c+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
+      give {_it} to {_p}
+      stop
+    
+    if {_t} is "talisman_mana":
+      set {_it} to lapis lazuli named "&9&lMana Talisman"
+      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &9Mana&7." and "&7" and "&9Mana: &9+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
+      give {_it} to {_p}
+      stop
+    
+    send "&cUnknown item type. &7Try: testring, testcharm, testamulet, accessory_hp, accessory_mana, necklace_speed, ring_fortune, talisman_hp, talisman_mana" to player
+
+# --------------------------
+# Click handling
+# --------------------------
+
+on inventory click:
+  # XP Rune: while HOLDING the rune in your hand, click a tool in your inventory to apply
+  if clicked inventory is player's inventory:
+    set {_hand} to tool of player
+    if isXPRuneItem({_hand}) is true:
+      # Must click an actual item slot
+      set {_slotNum} to clicked slot
+      if {_slotNum} is not set:
+        stop
+      set {_clickedItem} to slot {_slotNum} of clicked inventory
+      if {_clickedItem} is not set:
+        stop
+      if type of {_clickedItem} is air:
+        stop
+      if isEligibleRuneTarget({_clickedItem}) is true:
+        cancel event
+        set {_tool} to {_clickedItem}
+        if applyXPRuneToTool(player, {_tool}) is true:
+          set slot {_slotNum} of clicked inventory to {_tool}
+          # Consume 1 rune from hand
+          if amount of {_hand} <= 1:
+            set tool of player to air
+          else:
+            subtract 1 from amount of {_hand}
+            set tool of player to {_hand}
+          send "&aApplied &fXP Rune&a. &8(1.75x XP)" to player
+        else:
+          send "&cThat item already has an XP Rune." to player
+        stop
+
+
+# --------------------------
+# XP Rune multiplier hooks (works with tab_levels_ranks.sk XP system)
+# Applies +75% bonus XP after the base XP is awarded (=> 1.75x total).
+# --------------------------
+
+
+# --------------------------
+# XP Rune bonus XP
+# Adds +75% (total 1.75x) of whatever base XP the main XP system just awarded.
+# This does NOT require editing your tab script, but it DOES expect your level system to:
+#  - store XP in {xp::%uuid%}
+#  - have the /levelxpadd <player> <amount> command (from your tab_levels_ranks.sk)
+# --------------------------
+
+on break:
+  if gamemode of player is creative:
+    stop
+  if hasXPRuneOnTool(tool of player) is false:
+    stop
+  set {_u} to "%uuid of player%"
+  set {_before} to {xp::%{_u}%}
+  if {_before} is not set:
+    set {_before} to 0
+  wait 1 tick
+  set {_after} to {xp::%{_u}%}
+  if {_after} is not set:
+    set {_after} to 0
+  set {_gain} to {_after} - {_before}
+  if {_gain} <= 0:
+    stop
+  set {_bonus} to {_gain} * 0.75
+  if {_bonus} <= 0:
+    stop
+  execute console command "levelxpadd %name of player% %{_bonus}%"
+
+on fishing state change:
+  if event-fishing state is fish caught:
+    if gamemode of player is creative:
+      stop
+    if hasXPRuneOnTool(tool of player) is false:
+      stop
+    set {_u} to "%uuid of player%"
+    set {_before} to {xp::%{_u}%}
+    if {_before} is not set:
+      set {_before} to 0
+    wait 1 tick
+    set {_after} to {xp::%{_u}%}
+    if {_after} is not set:
+      set {_after} to 0
+    set {_gain} to {_after} - {_before}
+    if {_gain} <= 0:
+      stop
+    set {_bonus} to {_gain} * 0.75
+    if {_bonus} <= 0:
+      stop
+    execute console command "levelxpadd %name of player% %{_bonus}%"
+
+on death:
+  if attacker is a player:
+    if victim is a player:
+      stop
+    if gamemode of attacker is creative:
+      stop
+    if hasXPRuneOnTool(tool of attacker) is false:
+      stop
+    set {_u} to "%uuid of attacker%"
+    set {_before} to {xp::%{_u}%}
+    if {_before} is not set:
+      set {_before} to 0
+    wait 1 tick
+    set {_after} to {xp::%{_u}%}
+    if {_after} is not set:
+      set {_after} to 0
+    set {_gain} to {_after} - {_before}
+    if {_gain} <= 0:
+      stop
+    set {_bonus} to {_gain} * 0.75
+    if {_bonus} <= 0:
+      stop
+    execute console command "levelxpadd %name of attacker% %{_bonus}%"

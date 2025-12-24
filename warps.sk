@@ -1,0 +1,218 @@
+# ============================================
+#  Simple Warp Menu (Multiverse + Level Locks)
+#  Full edited skript
+#  - Title not bold
+#  - Better lore on warp buttons
+#  - Fills ALL empty slots with dark gray glass (won't overwrite buttons)
+#  - OP / perm bypass for level locks
+# ============================================
+
+options:
+  warp_gui_title: &8Warps
+  warp_gui_rows: 3
+
+  req_mine: 10
+  req_farm: 20
+
+  admin_perm: tablevels.admin
+  bypass_perm: warps.bypass
+
+  msg_notset: &cThat warp is not set yet.
+  msg_tp: &aWarping...
+  msg_locked: &cLocked. &7Required: &f%{_req}% &7| Your Level: &f%{_lvl}%
+
+# --------------------------
+# Helpers (level storage compatible with your tab script)
+# --------------------------
+
+function wUid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+function wLevel(p: player) :: number:
+  set {_u} to wUid({_p})
+  if {lvl::%{_u}%} is not set:
+    set {lvl::%{_u}%} to 1
+  return {lvl::%{_u}%}
+
+function warpIsSet(id: text) :: boolean:
+  if {warpLoc::%{_id}%} is set:
+    return true
+  return false
+
+function canBypass(p: player) :: boolean:
+  if {_p} is op:
+    return true
+  if {_p} has permission "warps.bypass":
+    return true
+  if {_p} has permission "tablevels.admin":
+    return true
+  return false
+
+# --------------------------
+# GUI
+# --------------------------
+
+function openWarpMenu(p: player):
+  set {_p} to {_p}
+  set {_inv} to chest inventory with {@warp_gui_rows} rows named "{@warp_gui_title}"
+
+  # --------------------------
+  # Fill ALL slots with dark gray glass first
+  # --------------------------
+  set {_size} to {@warp_gui_rows} * 9
+  set {_max} to {_size} - 1
+  set {_i} to 0
+  set {_glass} to black stained glass pane
+  set name of {_glass} to " "
+  while {_i} <= {_max}:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # --------------------------
+  # Place buttons on top
+  # --------------------------
+
+  # Spawn
+  if warpIsSet("spawn") is true:
+    set slot 10 of {_inv} to compass named "&aSpawn" with lore "&8" and "&7Main hub and safe area" and "&7Use this to regroup and travel" and "" and "&aClick to warp"
+  else:
+    set slot 10 of {_inv} to compass named "&aSpawn" with lore "&8" and "&7Main hub and safe area" and "&cWarp not set" and "" and "&8Admin: /setwarp spawn"
+
+  # Mine (locked)
+  set {_reqMine} to {@req_mine}
+  if warpIsSet("mine") is true:
+    set slot 12 of {_inv} to iron pickaxe named "&bMine" with lore "&8" and "&7Mining zone with ores and drops" and "&7Great for progression and money" and "" and "&7Required Level: &f%{_reqMine}%" and "&aClick to warp"
+  else:
+    set slot 12 of {_inv} to iron pickaxe named "&bMine" with lore "&8" and "&7Mining zone with ores and drops" and "&cWarp not set" and "" and "&8Admin: /setwarp mine"
+
+  # Forest
+  if warpIsSet("forest") is true:
+    set slot 14 of {_inv} to oak sapling named "&aForest" with lore "&8" and "&7Foraging area for logs and materials" and "&7Good for early crafting resources" and "" and "&aClick to warp"
+  else:
+    set slot 14 of {_inv} to oak sapling named "&aForest" with lore "&8" and "&7Foraging area for logs and materials" and "&cWarp not set" and "" and "&8Admin: /setwarp forest"
+
+  # Farm (locked)
+  set {_reqFarm} to {@req_farm}
+  if warpIsSet("farm") is true:
+    set slot 16 of {_inv} to wheat named "&eFarm" with lore "&8" and "&7Farming zone for crops and drops" and "&7Useful for food and economy items" and "" and "&7Required Level: &f%{_reqFarm}%" and "&aClick to warp"
+  else:
+    set slot 16 of {_inv} to wheat named "&eFarm" with lore "&8" and "&7Farming zone for crops and drops" and "&cWarp not set" and "" and "&8Admin: /setwarp farm"
+
+  # Extra blanks
+  set slot 20 of {_inv} to light gray stained glass pane named "&7Coming Soon" with lore "&8" and "&7More zones will be added here" and "&7Stay tuned..."
+  set slot 22 of {_inv} to light gray stained glass pane named "&7Coming Soon" with lore "&8" and "&7More zones will be added here" and "&7Stay tuned..."
+
+  # Close
+  set slot 26 of {_inv} to barrier named "&cClose" with lore "&8" and "&7Click to close the menu"
+
+  set {warpsGuiOpen::%wUid({_p})%} to true
+  open {_inv} to {_p}
+
+# --------------------------
+# Commands
+# --------------------------
+
+command /warps:
+  trigger:
+    openWarpMenu(player)
+
+command /warp:
+  trigger:
+    openWarpMenu(player)
+
+command /setwarp <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_id} to arg-1
+    set {_id} to lowercase {_id}
+
+    if {_id} is "spawn":
+      set {warpLoc::spawn} to location of player
+    else if {_id} is "mine":
+      set {warpLoc::mine} to location of player
+    else if {_id} is "forest":
+      set {warpLoc::forest} to location of player
+    else if {_id} is "farm":
+      set {warpLoc::farm} to location of player
+    else:
+      send "&cValid: &fspawn&7, &fmine&7, &fforest&7, &ffarm" to player
+      stop
+
+    send "&aSet warp &f%{_id}%&a to your current location." to player
+
+# --------------------------
+# Click handling (prevents taking items)
+# --------------------------
+
+on inventory click:
+  if {warpsGuiOpen::%wUid(player)%} is true:
+    cancel event
+
+    if clicked slot is 26:
+      close player's inventory
+      stop
+
+    # Spawn
+    if clicked slot is 10:
+      if {warpLoc::spawn} is not set:
+        send "{@msg_notset}" to player
+        stop
+      send "{@msg_tp}" to player
+      teleport player to {warpLoc::spawn}
+      close player's inventory
+      stop
+
+    # Mine (level locked, bypass allowed)
+    if clicked slot is 12:
+      if {warpLoc::mine} is not set:
+        send "{@msg_notset}" to player
+        stop
+
+      if canBypass(player) is false:
+        set {_lvl} to wLevel(player)
+        set {_req} to {@req_mine}
+        if {_lvl} < {_req}:
+          send "{@msg_locked}" to player
+          stop
+
+      send "{@msg_tp}" to player
+      teleport player to {warpLoc::mine}
+      close player's inventory
+      stop
+
+    # Forest
+    if clicked slot is 14:
+      if {warpLoc::forest} is not set:
+        send "{@msg_notset}" to player
+        stop
+      send "{@msg_tp}" to player
+      teleport player to {warpLoc::forest}
+      close player's inventory
+      stop
+
+    # Farm (level locked, bypass allowed)
+    if clicked slot is 16:
+      if {warpLoc::farm} is not set:
+        send "{@msg_notset}" to player
+        stop
+
+      if canBypass(player) is false:
+        set {_lvl} to wLevel(player)
+        set {_req} to {@req_farm}
+        if {_lvl} < {_req}:
+          send "{@msg_locked}" to player
+          stop
+
+      send "{@msg_tp}" to player
+      teleport player to {warpLoc::farm}
+      close player's inventory
+      stop
+
+on inventory drag:
+  if {warpsGuiOpen::%wUid(player)%} is true:
+    cancel event
+
+on inventory close:
+  if {warpsGuiOpen::%wUid(player)%} is true:
+    delete {warpsGuiOpen::%wUid(player)%}

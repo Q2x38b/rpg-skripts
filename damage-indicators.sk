@@ -1,0 +1,276 @@
+# =========================================================
+# Damage Indicators (Hypixel Skyblock Style)
+# Shows floating damage numbers when hitting mobs
+# Based on Java implementation from src/
+# =========================================================
+
+options:
+  enabled: true
+  crit_chance: 0.1
+  crit_multiplier: 1.5
+  indicator_duration: 1.5
+
+# ----------------------------
+# Helpers
+# ----------------------------
+
+function di_cc(t: text) :: text:
+  set {_s} to {_t}
+  replace all "&" with "§" in {_s}
+  return {_s}
+
+function di_isCrit() :: boolean:
+  set {_rand} to random number between 0 and 1
+  if {_rand} <= {@crit_chance}:
+    return true
+  return false
+
+function di_calculateDamage(base: number, isCrit: boolean) :: number:
+  set {_dmg} to {_base}
+  if {_isCrit} is true:
+    set {_dmg} to {_dmg} * {@crit_multiplier}
+  return round({_dmg})
+
+# Format number with comma separators (e.g., 1234 -> 1,234)
+function di_formatNumber(num: number) :: text:
+  set {_n} to round({_num})
+  set {_str} to "%{_n}%"
+  # Simple comma formatting for numbers >= 1000
+  if {_n} >= 1000:
+    set {_thousands} to floor({_n} / 1000)
+    set {_remainder} to {_n} - ({_thousands} * 1000)
+    if {_remainder} < 10:
+      set {_str} to "%{_thousands}%,00%{_remainder}%"
+    else if {_remainder} < 100:
+      set {_str} to "%{_thousands}%,0%{_remainder}%"
+    else:
+      set {_str} to "%{_thousands}%,%{_remainder}%"
+  return {_str}
+
+# Get entity width for hitbox positioning
+function di_getEntityWidth(e: entity) :: number:
+  set {_type} to "%type of {_e}%"
+  if {_type} is "zombie":
+    return 0.6
+  if {_type} is "skeleton":
+    return 0.6
+  if {_type} is "player":
+    return 0.6
+  if {_type} is "spider":
+    return 1.4
+  if {_type} is "creeper":
+    return 0.6
+  if {_type} is "enderman":
+    return 0.6
+  if {_type} is "cow":
+    return 0.9
+  if {_type} is "pig":
+    return 0.9
+  if {_type} is "sheep":
+    return 0.9
+  if {_type} is "chicken":
+    return 0.4
+  if {_type} is "slime":
+    return 0.52
+  return 0.8
+
+# Create rainbow text for critical hits
+function di_createRainbowText(text: text) :: text:
+  set {_colors::1} to "&f"
+  set {_colors::2} to "&e"
+  set {_colors::3} to "&6"
+  set {_colors::4} to "&c"
+  set {_colors::5} to "&6"
+  set {_colors::6} to "&e"
+  set {_result} to ""
+  set {_i} to 0
+  set {_len} to length of {_text}
+  while {_i} < {_len}:
+    set {_char} to character at {_i} of {_text}
+    set {_colorIndex} to {_i}
+    while {_colorIndex} >= 6:
+      set {_colorIndex} to {_colorIndex} - 6
+    add 1 to {_colorIndex}
+    set {_color} to {_colors::%{_colorIndex}%}
+    set {_result} to "%{_result}%%{_color}%%{_char}%"
+    add 1 to {_i}
+  return di_cc({_result})
+
+# Format damage text with colors
+function di_formatDamage(dmg: number, isCrit: boolean, isHeal: boolean) :: text:
+  set {_dmgStr} to di_formatNumber({_dmg})
+  
+  if {_isHeal} is true:
+    return di_cc("&a+%{_dmgStr}%")
+  else if {_isCrit} is true:
+    return di_createRainbowText({_dmgStr})
+  else:
+    return di_cc("&7%{_dmgStr}%")
+
+# ----------------------------
+# Damage Indicator Display
+# ----------------------------
+
+function di_showIndicator(e: entity, dmg: number, isCrit: boolean, isHeal: boolean):
+  if {@enabled} is false:
+    if {di::enabled} is false:
+      stop
+  
+  # Calculate entity hitbox dimensions for positioning
+  set {_baseLoc} to location of {_e}
+  # Use approximate entity height (most entities are around 1-2 blocks tall)
+  set {_entityHeight} to 1.5
+  if {_e} is a player:
+    set {_entityHeight} to 1.8
+  if {_e} is a spider:
+    set {_entityHeight} to 0.9
+  if {_e} is a chicken:
+    set {_entityHeight} to 0.7
+  set {_entityWidth} to di_getEntityWidth({_e})
+  
+  # Position indicators WITHIN the entity's actual hitbox
+  # Random position inside the entity's bounds
+  set {_randomY} to random number between 0 and {_entityHeight}
+  set {_randomX} to (random number between 0 and 1) - 0.5
+  set {_randomX} to {_randomX} * {_entityWidth}
+  set {_randomZ} to (random number between 0 and 1) - 0.5
+  set {_randomZ} to {_randomZ} * {_entityWidth}
+  
+  # Ensure position is within the actual hitbox bounds
+  set {_halfWidth} to {_entityWidth} / 2
+  set {_negHalfWidth} to 0 - {_halfWidth}
+  if {_randomX} > {_halfWidth}:
+    set {_randomX} to {_halfWidth}
+  if {_randomX} < {_negHalfWidth}:
+    set {_randomX} to {_negHalfWidth}
+  if {_randomZ} > {_halfWidth}:
+    set {_randomZ} to {_halfWidth}
+  if {_randomZ} < {_negHalfWidth}:
+    set {_randomZ} to {_negHalfWidth}
+  if {_randomY} < 0:
+    set {_randomY} to 0
+  if {_randomY} > {_entityHeight}:
+    set {_randomY} to {_entityHeight}
+  
+  set {_x} to x-coordinate of {_baseLoc} + {_randomX}
+  set {_y} to y-coordinate of {_baseLoc} + {_randomY}
+  set {_z} to z-coordinate of {_baseLoc} + {_randomZ}
+  set {_w} to world of {_baseLoc}
+  set {_spawnLoc} to location at {_x}, {_y}, {_z} in {_w}
+  
+  # Create armor stand
+  spawn armor stand at {_spawnLoc}
+  set {_stand} to last spawned entity
+  
+  # Configure armor stand (invisible, marker, small, no arms, no base plate)
+  set {_stand}'s gravity to false
+  
+  # Try to make invisible using entity data command
+  # Use location-based selector to find the armor stand we just spawned
+  set {_x} to x-coordinate of {_spawnLoc}
+  set {_y} to y-coordinate of {_spawnLoc}
+  set {_z} to z-coordinate of {_spawnLoc}
+  set {_wName} to name of world of {_spawnLoc}
+  # Use data command to make armor stand invisible, marker, small, no arms, no base plate
+  execute console command "execute in %{_wName}% run data merge entity @e[type=armor_stand,x=%{_x}%,y=%{_y}%,z=%{_z}%,distance=..1,limit=1] {Invisible:1b,Marker:1b,Small:1b,ShowArms:0b,NoBasePlate:1b}"
+  
+  # Set damage text
+  set {_damageText} to di_formatDamage({_dmg}, {_isCrit}, {_isHeal})
+  set {_stand}'s custom name to {_damageText}
+  
+  # Mark for protection
+  set {di::stand::%{_stand}%} to true
+  
+  # Show custom name after 2 ticks delay (to prevent movement visibility)
+  wait 2 ticks
+  if {_stand} is set:
+    if {_stand} is not dead:
+      # Try to ensure custom name is visible (text should show even if stand is invisible)
+      # Note: Full invisibility requires NMS/data commands or SkBee addon
+      # The custom name should already be set and visible
+  
+  # Animate the indicator (stationary, no movement)
+  set {_ticks} to round({@indicator_duration} * 20)
+  set {_i} to 0
+  
+  while {_i} < {_ticks}:
+    wait 1 tick
+    if {_stand} is not set:
+      stop
+    if {_stand} is dead:
+      stop
+    add 1 to {_i}
+  
+  # Remove indicator
+  if {_stand} is set:
+    if {_stand} is not dead:
+      delete {di::stand::%{_stand}%}
+      kill {_stand}
+
+# Protect damage indicator armor stands from being broken or interacted with
+on damage of armor stand:
+  if {di::stand::%victim%} is true:
+    cancel event
+    stop
+
+# Prevent right-click interaction with armor stands
+on right click:
+  if clicked entity is set:
+    if clicked entity is an armor stand:
+      if {di::stand::%clicked entity%} is true:
+        cancel event
+        stop
+
+# Prevent entity targeting (left-click/punch) - this prevents spawning new armor stands
+on damage:
+  if victim is an armor stand:
+    if {di::stand::%victim%} is true:
+      cancel event
+      stop
+
+# ----------------------------
+# Event Handlers
+# ----------------------------
+
+on damage:
+  if {@enabled} is false:
+    if {di::enabled} is false:
+      stop
+  
+  if attacker is a player:
+    if victim is a living entity:
+      if victim is a player:
+        stop
+      
+      # Get actual damage dealt
+      set {_baseDmg} to damage
+      set {_isCrit} to di_isCrit()
+      set {_finalDmg} to di_calculateDamage({_baseDmg}, {_isCrit})
+      
+      # Show indicator
+      di_showIndicator(victim, {_finalDmg}, {_isCrit}, false)
+
+# ----------------------------
+# Commands
+# ----------------------------
+
+command /damageindicators [<text>]:
+  permission: tablevels.admin
+  permission message: &cNo permission.
+  trigger:
+    if argument 1 is "toggle":
+      if {@enabled} is true:
+        set {di::enabled} to false
+        message "&cDamage indicators disabled." to player
+      else:
+        set {di::enabled} to true
+        message "&aDamage indicators enabled." to player
+      stop
+    
+    set {_status} to "enabled"
+    if {@enabled} is false:
+      set {_status} to "disabled"
+    message "&7Damage Indicators:" to player
+    message "&7Status: &f%{_status}%" to player
+    message "&7Use &e/damageindicators toggle &7to toggle." to player
+

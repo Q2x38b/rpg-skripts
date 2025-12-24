@@ -1,0 +1,841 @@
+# =========================================================
+#  Tick Mining System (Stone + Ores) + WorldGuard(skript) Compliance
+#  - Silent deny (no chat/actionbar) when not allowed to break
+#  - Autopickup: give-or-drop fallback so drops never vanish
+# =========================================================
+
+options:
+  lore_speed_prefix: &7Mining Speed: &a+
+  lore_fortune_prefix: &7Mining Fortune: &b+
+  lore_farming_fortune_prefix: &7Farming Fortune: &a+
+
+  default_mining_speed: 1.0
+  max_distance: 6
+  tick_interval: 1 tick
+
+  swing_grace_ticks: 2
+  require_target_lock: true
+  cancel_vanilla_break: true
+
+  mining_xp_per_block: 4
+
+  crack_min_step: 0.02
+
+  actionbar_enabled: true
+  actionbar_respect_xp_lock: true
+  actionbar_prefix: &7Mining &f
+  actionbar_mid:  &8| &a
+  actionbar_suffix: % &7
+
+  wg_bypass_perm: tablevels.worldguard.bypass
+  wg_perm_prefix: tablevels.worldguard
+  wg_default_seconds: 20
+  wg_default_placeholder: "bedrock"
+
+
+# =========================================================
+#  Helpers
+# =========================================================
+
+function ms_uid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+function ms_type(b: block) :: text:
+  return lowercase "%type of {_b}%"
+
+function ms_isMineable(b: block) :: boolean:
+  if {_b} is air:
+    return false
+  set {_t} to ms_type({_b})
+  if {_t} contains "ore":
+    return true
+  if {_t} is "stone":
+    return true
+  if {_t} is "cobblestone":
+    return true
+  if {_t} contains "deepslate":
+    return true
+  if {_t} is "andesite":
+    return true
+  if {_t} is "granite":
+    return true
+  if {_t} is "diorite":
+    return true
+  if {_t} contains "tuff":
+    return true
+  if {_t} contains "basalt":
+    return true
+  if {_t} contains "blackstone":
+    return true
+  if {_t} contains "netherrack":
+    return true
+  return false
+
+function ms_hardness(b: block, wName: text) :: number:
+  set {_t} to ms_type({_b})
+  set {_key} to "%type of {_b}%"
+
+  # Check world-specific hardness first
+  if {mshard::%{_wName}%::%{_key}%} is set:
+    set {_raw} to {mshard::%{_wName}%::%{_key}%}
+    if {_raw} starts with "abs:":
+      replace all "abs:" with "" in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        return {_n}
+    if {_raw} starts with "mult:":
+      # Need base hardness for multiplier
+      set {_base} to ms_hardness_base({_b})
+      replace all "mult:" with "" in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        return {_base} * {_n}
+
+  # Check global hardness override
+  if {mshard::%{_t}%} is set:
+    set {_raw} to {mshard::%{_t}%}
+    if {_raw} starts with "abs:":
+      replace all "abs:" with "" in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        return {_n}
+    if {_raw} starts with "mult:":
+      set {_base} to ms_hardness_base({_b})
+      replace all "mult:" with "" in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        return {_base} * {_n}
+
+  # Return base hardness
+  return ms_hardness_base({_b})
+
+function ms_hardness_base(b: block) :: number:
+  set {_t} to ms_type({_b})
+  if {_t} contains "deepslate":
+    if {_t} contains "ore":
+      return 6.0
+    else:
+      return 4.5
+  else if {_t} contains "ore":
+    return 5.0
+  else if {_t} is "stone":
+    return 3.0
+  else if {_t} is "cobblestone":
+    return 2.6
+  else if {_t} is "andesite":
+    return 2.8
+  else if {_t} is "granite":
+    return 2.8
+  else if {_t} is "diorite":
+    return 2.8
+  else if {_t} contains "tuff":
+    return 3.2
+  else if {_t} contains "basalt":
+    return 3.6
+  else if {_t} contains "blackstone":
+    return 3.6
+  else if {_t} contains "netherrack":
+    return 1.2
+  return 0
+
+function ms_env(p: player) :: number:
+  set {_m} to 1.0
+  if {_p} is in water:
+    set {_m} to {_m} * 0.25
+  if {_p} is not on ground:
+    set {_m} to {_m} * 0.35
+  if {_p} is sneaking:
+    set {_m} to {_m} * 1.05
+  if {_m} < 0.05:
+    return 0.05
+  return {_m}
+
+function ms_bar(pct: number) :: text:
+  set {_seg} to floor({_pct} / 10)
+  if {_seg} < 0:
+    set {_seg} to 0
+  if {_seg} > 10:
+    set {_seg} to 10
+
+  set {_bar} to ""
+  loop 10 times:
+    if loop-number <= {_seg}:
+      set {_bar} to "%{_bar}%|"
+    else:
+      set {_bar} to "%{_bar}%&8|"
+  return {_bar}
+
+function ms_giveOrDrop(p: player, it: itemstack, loc: location):
+  if {_it} is air:
+    stop
+  if {_p}'s inventory can hold {_it}:
+    give {_it} to {_p}
+  else:
+    drop {_it} at {_loc}
+
+
+# =========================================================
+#  XP + Autopickup hooks (local, so the script compiles)
+#  - If you already have a separate system, you can replace
+#    the bodies of these functions with your own logic.
+# =========================================================
+
+function addXP(p: player, amt: number):
+  if {_p} is not set:
+    stop
+  if {_amt} is not set:
+    stop
+  if {_amt} <= 0:
+    stop
+  # Default behavior: vanilla EXP (safe / dependency-free)
+  set {_exp} to {_amt} parsed as integer
+  if {_exp} is set:
+    if {_exp} > 0:
+      set {_expVal} to {_exp}
+      execute console command "xp %{_expVal}L %name of {_p}%"
+
+function autoPickupEnabled(p: player) :: boolean:
+  # Default behavior:
+  # - if they have permission, it's enabled
+  # - otherwise fall back to a toggle var, else to the option default
+  if {_p} has permission "minningspeed.autopickup":
+    return true
+
+  set {_u} to ms_uid({_p})
+  if {ms_autopickup::%{_u}%} is set:
+    return {ms_autopickup::%{_u}%}
+
+  # If you want autopickup ALWAYS on/off by default, change this.
+  return true
+
+
+# =========================================================
+#  WorldGuard(skript) silent permission/bypass checks
+# =========================================================
+
+function ms_wg_has_bypass(p: player, wName: text, action: text) :: boolean:
+  if {_p} has permission "{@wg_bypass_perm}":
+    return true
+  if {_p} has permission "{@wg_perm_prefix}.%{_wName}%.bypass":
+    return true
+  if {_p} has permission "{@wg_perm_prefix}.%{_action}%":
+    return true
+  if {_p} has permission "{@wg_perm_prefix}.%{_wName}%.%{_action}%":
+    return true
+  return false
+
+function ms_wg_can_break_silent(p: player, b: block) :: boolean:
+  set {_wName} to name of world of {_p}
+  
+  # Check bypass first
+  if ms_wg_has_bypass({_p}, {_wName}, "break") is true:
+    return true
+
+  # STRICT WHITELIST: Only allowlisted blocks can be broken (no defaults)
+  set {_btType} to type of {_b}
+  set {_allowed} to false
+
+  # Check typed allowlist (preferred)
+  if {wgblock::allowtype::%{_wName}%::*} is set:
+    if {wgblock::allowtype::%{_wName}%::*} contains {_btType}:
+      set {_allowed} to true
+  else if {wgblock::allow::%{_wName}%::*} is set:
+    # Legacy text allowlist support
+    set {_btName} to "%type of {_b}%"
+    if {wgblock::allow::%{_wName}%::*} contains {_btName}:
+      set {_allowed} to true
+
+  # STRICT: Return false if not allowed (no default allowed blocks)
+  return {_allowed}
+
+
+# =========================================================
+#  Tool / Speed (ONE lore line)
+# =========================================================
+
+function ms_isTool(it: itemstack) :: boolean:
+  if {_it} is air:
+    return false
+  # Check if it's a custom tool (has mining speed lore)
+  set {_l::*} to lore of {_it}
+  if {_l::*} is not set:
+    return false
+  set {_prefix} to "{@lore_speed_prefix}"
+  loop {_l::*}:
+    if "%loop-value%" starts with "%{_prefix}%":
+      return true
+  return false
+
+function ms_isVanillaTool(it: itemstack) :: boolean:
+  if {_it} is air:
+    return false
+  # Check if it's a vanilla tool (pickaxe, axe, shovel, hoe)
+  set {_t} to "%type of {_it}%"
+  if {_t} contains "pickaxe":
+    return true
+  if {_t} contains "axe":
+    return true
+  if {_t} contains "shovel":
+    return true
+  if {_t} contains "hoe":
+    return true
+  return false
+
+function ms_speed(it: itemstack) :: number:
+  if {_it} is air:
+    return {@default_mining_speed}
+
+  set {_l::*} to lore of {_it}
+  if {_l::*} is not set:
+    return {@default_mining_speed}
+
+  set {_prefix} to "{@lore_speed_prefix}"
+  loop {_l::*}:
+    set {_line} to "%loop-value%"
+    if {_line} starts with "%{_prefix}%":
+      set {_raw} to {_line}
+      replace all "%{_prefix}%" with "" in {_raw}
+      replace all "," with "." in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        if {_n} < 0.05:
+          return 0.05
+        if {_n} > 200:
+          return 200
+        return {_n}
+
+  return {@default_mining_speed}
+
+# =========================================================
+#  Mining Fortune (Lore-based)
+#  - Every 100 Mining Fortune => +1x drops (total multiplier = 1 + floor(MF/100))
+#  - By default this applies to ore blocks (type contains "ore")
+# =========================================================
+
+function ms_fortune(it: itemstack) :: number:
+  if {_it} is air:
+    return 0
+
+  set {_l::*} to lore of {_it}
+  if {_l::*} is not set:
+    return 0
+
+  set {_prefix} to "{@lore_fortune_prefix}"
+  loop {_l::*}:
+    set {_line} to "%loop-value%"
+    if {_line} starts with "%{_prefix}%":
+      set {_raw} to {_line}
+      replace all "%{_prefix}%" with "" in {_raw}
+      replace all "," with "." in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        if {_n} < 0:
+          return 0
+        return floor({_n})
+
+  return 0
+
+function ms_miningFortune(p: player) :: number:
+  set {_sum} to 0
+
+  add ms_fortune({_p}'s tool) to {_sum}
+  add ms_fortune(offhand item of {_p}) to {_sum}
+
+  if helmet of {_p} is set:
+    add ms_fortune(helmet of {_p}) to {_sum}
+  if chestplate of {_p} is set:
+    add ms_fortune(chestplate of {_p}) to {_sum}
+  if leggings of {_p} is set:
+    add ms_fortune(leggings of {_p}) to {_sum}
+  if boots of {_p} is set:
+    add ms_fortune(boots of {_p}) to {_sum}
+  
+  # Add equipment fortune bonus
+  set {_u} to "%uuid of {_p}%"
+  if {equip::fortune::%{_u}%} is set:
+    add {equip::fortune::%{_u}%} to {_sum}
+
+  if {_sum} < 0:
+    set {_sum} to 0
+  return {_sum}
+
+function ms_farmingFortune(it: itemstack) :: number:
+  if {_it} is air:
+    return 0
+
+  set {_l::*} to lore of {_it}
+  if {_l::*} is not set:
+    return 0
+
+  set {_prefix} to "{@lore_farming_fortune_prefix}"
+  loop {_l::*}:
+    set {_line} to "%loop-value%"
+    if {_line} starts with "%{_prefix}%":
+      set {_raw} to {_line}
+      replace all "%{_prefix}%" with "" in {_raw}
+      replace all "," with "." in {_raw}
+      set {_n} to "%{_raw}%" parsed as number
+      if {_n} is set:
+        if {_n} < 0:
+          return 0
+        return floor({_n})
+
+  return 0
+
+function ms_farmingFortuneTotal(p: player) :: number:
+  set {_sum} to 0
+
+  add ms_farmingFortune({_p}'s tool) to {_sum}
+  add ms_farmingFortune(offhand item of {_p}) to {_sum}
+
+  if helmet of {_p} is set:
+    add ms_farmingFortune(helmet of {_p}) to {_sum}
+  if chestplate of {_p} is set:
+    add ms_farmingFortune(chestplate of {_p}) to {_sum}
+  if leggings of {_p} is set:
+    add ms_farmingFortune(leggings of {_p}) to {_sum}
+  if boots of {_p} is set:
+    add ms_farmingFortune(boots of {_p}) to {_sum}
+
+  if {_sum} < 0:
+    set {_sum} to 0
+  return {_sum}
+
+function ms_fortuneEligible(b: block) :: boolean:
+  # Default: only ores. Expand this if you want fortune to apply to more blocks.
+  set {_t} to ms_type({_b})
+  if {_t} contains "ore":
+    return true
+  return false
+
+function ms_spawnMultipliedDrop(p: player, it: itemstack, loc: location, mult: number, giveMode: boolean):
+  if {_it} is air:
+    stop
+
+  if {_mult} is not set:
+    set {_mult} to 1
+  if {_mult} < 1:
+    set {_mult} to 1
+
+  set {_base} to amount of {_it}
+  if {_base} is not set:
+    set {_base} to 1
+
+  set {_total} to {_base} * {_mult}
+  if {_total} <= 0:
+    stop
+
+  while {_total} > 64:
+    set {_stack} to {_it}
+    set amount of {_stack} to 64
+    if {_giveMode} is true:
+      ms_giveOrDrop({_p}, {_stack}, {_loc})
+    else:
+      drop {_stack} at {_loc}
+    subtract 64 from {_total}
+
+  set {_stack2} to {_it}
+  set amount of {_stack2} to {_total}
+  if {_giveMode} is true:
+    ms_giveOrDrop({_p}, {_stack2}, {_loc})
+  else:
+    drop {_stack2} at {_loc}
+
+function ms_setSpeedLore(it: itemstack, spd: number) :: itemstack:
+  set {_new} to {_it}
+  set {_l::*} to lore of {_new}
+  set {_prefix} to "{@lore_speed_prefix}"
+
+  if {_l::*} is set:
+    loop {_l::*}:
+      if "%loop-value%" starts with "%{_prefix}%":
+        remove loop-value from {_l::*}
+  else:
+    clear {_l::*}
+
+  add "%{_prefix}%%{_spd}%" to {_l::*}
+  set lore of {_new} to {_l::*}
+  return {_new}
+
+function ms_clearSpeedLore(it: itemstack) :: itemstack:
+  set {_new} to {_it}
+  set {_l::*} to lore of {_new}
+  if {_l::*} is not set:
+    return {_new}
+
+  set {_prefix} to "{@lore_speed_prefix}"
+  loop {_l::*}:
+    if "%loop-value%" starts with "%{_prefix}%":
+      remove loop-value from {_l::*}
+
+  set lore of {_new} to {_l::*}
+  return {_new}
+
+
+# =========================================================
+#  Mining state + crack stages (SkBee)
+# =========================================================
+
+function ms_resetCrack(p: player):
+  set {_u} to ms_uid({_p})
+  if {msmine::%{_u}%::loc} is not set:
+    stop
+  set {_loc} to {msmine::%{_u}%::loc}
+  set {_b} to block at {_loc}
+  if {_b} is air:
+    stop
+  if {msmine::%{_u}%::animid} is set:
+    make {_p} see damage of {_b} as 0 by {msmine::%{_u}%::animid}
+  set {msmine::%{_u}%::lastdmg} to 0
+
+function ms_clear(p: player):
+  ms_resetCrack({_p})
+  set {_u} to ms_uid({_p})
+  delete {msmine::%{_u}%::*}
+
+function ms_trackTarget(p: player, b: block):
+  set {_u} to ms_uid({_p})
+  set {_newLoc} to location of {_b}
+
+  set {_changed} to true
+  if {msmine::%{_u}%::loc} is set:
+    if {msmine::%{_u}%::loc} is {_newLoc}:
+      set {_changed} to false
+
+  if {_changed} is true:
+    ms_resetCrack({_p})
+    delete {msmine::%{_u}%::progress}
+    delete {msmine::%{_u}%::animid}
+    delete {msmine::%{_u}%::grace}
+    delete {msmine::%{_u}%::swing}
+    delete {msmine::%{_u}%::lastdmg}
+
+    set {msmine::%{_u}%::loc} to {_newLoc}
+    set {msmine::%{_u}%::progress} to 0.0
+    set {msmine::%{_u}%::animid} to random integer between 10000 and 2000000000
+    set {msmine::%{_u}%::lastdmg} to 0.0
+
+    make {_p} see damage of {_b} as 0 by {msmine::%{_u}%::animid}
+  else:
+    if {msmine::%{_u}%::animid} is not set:
+      set {msmine::%{_u}%::animid} to random integer between 10000 and 2000000000
+    if {msmine::%{_u}%::progress} is not set:
+      set {msmine::%{_u}%::progress} to 0.0
+    if {msmine::%{_u}%::lastdmg} is not set:
+      set {msmine::%{_u}%::lastdmg} to 0.0
+
+function ms_pulseSwing(p: player):
+  set {_u} to ms_uid({_p})
+  set {msmine::%{_u}%::swing} to true
+  set {msmine::%{_u}%::grace} to {@swing_grace_ticks}
+
+
+# =========================================================
+#  Regen restore queue
+# =========================================================
+
+function ms_locKey(loc: location) :: text:
+  set {_w} to name of world of {_loc}
+  set {_x} to "%floor(x coordinate of {_loc})%"
+  set {_y} to "%floor(y coordinate of {_loc})%"
+  set {_z} to "%floor(z coordinate of {_loc})%"
+  return "%{_w}%:%{_x}%:%{_y}%:%{_z}%"
+
+function ms_schedule_restore(loc: location, bt: itemtype, sec: number):
+  set {_key} to ms_locKey({_loc})
+  set {msregen::loc::%{_key}%} to {_loc}
+  set {msregen::type::%{_key}%} to {_bt}
+  set {msregen::restore::%{_key}%} to {ms_tick} + ({_sec} * 20)
+
+
+# =========================================================
+#  Input detection
+# =========================================================
+
+on block damaging:
+  if gamemode of player is creative:
+    stop
+  if ms_isMineable(event-block) is false:
+    stop
+  
+  # Only handle if it's a custom tool OR vanilla tool (but vanilla tools should use custom mining)
+  if ms_isTool(player's tool) is false:
+    if ms_isVanillaTool(player's tool) is false:
+      stop
+
+  # Check WorldGuard whitelist - tools cannot break non-whitelisted blocks
+  if ms_wg_can_break_silent(player, event-block) is false:
+    cancel event
+    ms_clear(player)
+    stop
+
+  cancel event
+  ms_trackTarget(player, event-block)
+
+on arm swing:
+  if gamemode of player is creative:
+    stop
+  if ms_isTool(player's tool) is false:
+    stop
+
+  set {_tgt} to target block of player
+  if {_tgt} is not set:
+    stop
+  if ms_isMineable({_tgt}) is false:
+    stop
+  if distance between player and location of {_tgt} > {@max_distance}:
+    stop
+
+  # Check WorldGuard whitelist - custom tools cannot break non-whitelisted blocks
+  if ms_wg_can_break_silent(player, {_tgt}) is false:
+    ms_clear(player)
+    stop
+
+  ms_trackTarget(player, {_tgt})
+  ms_pulseSwing(player)
+
+on break:
+  if {@cancel_vanilla_break} is false:
+    stop
+  if gamemode of player is creative:
+    stop
+  if ms_isMineable(event-block) is false:
+    stop
+  
+  # Only handle if it's a custom tool OR vanilla tool (vanilla tools use custom mining)
+  if ms_isTool(player's tool) is false:
+    if ms_isVanillaTool(player's tool) is false:
+      stop
+
+  # Check WorldGuard whitelist - tools cannot break non-whitelisted blocks
+  if ms_wg_can_break_silent(player, event-block) is false:
+    cancel event
+    stop
+
+  set {wgms::handled::%location of event-block%} to true
+  cancel event
+  wait 2 ticks
+  delete {wgms::handled::%location of event-block%}
+  stop
+
+
+# =========================================================
+#  Restore queue runner
+# =========================================================
+
+every 2 ticks:
+  if {ms_tick} is not set:
+    set {ms_tick} to 0
+
+  loop {msregen::restore::*}:
+    set {_key} to loop-index
+    set {_due} to loop-value
+    if {_due} is not set:
+      delete {msregen::restore::%{_key}%}
+      delete {msregen::loc::%{_key}%}
+      delete {msregen::type::%{_key}%}
+      continue
+
+    if {ms_tick} is greater than or equal to {_due}:
+      set {_loc} to {msregen::loc::%{_key}%}
+      set {_bt} to {msregen::type::%{_key}%}
+      if {_loc} is set:
+        set block at {_loc} to {_bt}
+      delete {msregen::restore::%{_key}%}
+      delete {msregen::loc::%{_key}%}
+      delete {msregen::type::%{_key}%}
+
+
+# =========================================================
+#  Tick loop: mining + drops + xp + regen
+# =========================================================
+
+every {@tick_interval}:
+  if {ms_tick} is not set:
+    set {ms_tick} to 0
+  add 1 to {ms_tick}
+
+  loop all players:
+    set {_p} to loop-player
+    set {_u} to ms_uid({_p})
+
+    if {msmine::%{_u}%::loc} is not set:
+      continue
+
+    set {_loc} to {msmine::%{_u}%::loc}
+    set {_b} to block at {_loc}
+
+    if {_b} is air:
+      ms_clear({_p})
+      continue
+    if ms_isMineable({_b}) is false:
+      ms_clear({_p})
+      continue
+    if distance between {_p} and {_loc} > {@max_distance}:
+      ms_clear({_p})
+      continue
+
+    if {@require_target_lock} is true:
+      set {_tgt} to target block of {_p}
+      if {_tgt} is not set:
+        ms_clear({_p})
+        continue
+      if location of {_tgt} is not {_loc}:
+        ms_clear({_p})
+        continue
+
+    # Allow both custom tools and vanilla tools
+    if ms_isTool({_p}'s tool) is false:
+      if ms_isVanillaTool({_p}'s tool) is false:
+        ms_clear({_p})
+        continue
+
+    if ms_wg_can_break_silent({_p}, {_b}) is false:
+      ms_clear({_p})
+      continue
+
+    if {msmine::%{_u}%::swing} is not true:
+      if {msmine::%{_u}%::grace} is not set:
+        ms_clear({_p})
+        continue
+      remove 1 from {msmine::%{_u}%::grace}
+      if {msmine::%{_u}%::grace} <= 0:
+        ms_clear({_p})
+      continue
+
+    delete {msmine::%{_u}%::swing}
+    set {msmine::%{_u}%::grace} to {@swing_grace_ticks}
+
+    # Get hardness (world-specific if set, otherwise default)
+    set {_wName} to name of world of {_p}
+    set {_hard} to ms_hardness({_b}, {_wName})
+    
+    if {_hard} <= 0:
+      ms_clear({_p})
+      continue
+
+    # Get speed - use custom tool speed if available, otherwise default for vanilla tools
+    set {_spd} to ms_speed({_p}'s tool)
+    if ms_isTool({_p}'s tool) is false:
+      # Vanilla tools use default speed
+      set {_spd} to {@default_mining_speed}
+    
+    # Add equipment speed bonus
+    set {_u} to "%uuid of {_p}%"
+    if {equip::speed::%{_u}%} is set:
+      add {equip::speed::%{_u}%} to {_spd}
+    
+    set {_env} to ms_env({_p})
+
+    # Heavy nerf: 4th-root diminishing returns
+    set {_eff} to sqrt(sqrt({_spd}))
+
+    add ({_eff} * {_env}) / ({_hard} * 20) to {msmine::%{_u}%::progress}
+
+    set {_prog} to {msmine::%{_u}%::progress}
+    if {_prog} < 0:
+      set {_prog} to 0
+    if {_prog} > 1:
+      set {_prog} to 1
+
+    if {msmine::%{_u}%::lastdmg} is not set:
+      set {msmine::%{_u}%::lastdmg} to 0.0
+
+    set {_last} to {msmine::%{_u}%::lastdmg}
+    set {_diff} to {_prog} - {_last}
+    if {_diff} < 0:
+      set {_diff} to 0 - {_diff}
+
+    set {_doUpdate} to false
+    if {_diff} is greater than or equal to {@crack_min_step}:
+      set {_doUpdate} to true
+    if {_prog} is less than or equal to 0:
+      set {_doUpdate} to true
+    if {_prog} is greater than or equal to 1:
+      set {_doUpdate} to true
+
+    if {_doUpdate} is true:
+      make {_p} see damage of {_b} as {_prog} by {msmine::%{_u}%::animid}
+      set {msmine::%{_u}%::lastdmg} to {_prog}
+
+    # Actionbar disabled for custom tools (removed per user request)
+
+    if {_prog} >= 1:
+      # Final check: ensure block is still allowed
+      if ms_wg_can_break_silent({_p}, {_b}) is false:
+        ms_clear({_p})
+        continue
+
+      # Mark location as handled to prevent worldguard from processing it
+      set {wgms::handled::%{_loc}%} to true
+
+      set {_wName} to name of world of {_p}
+      set {_bt} to "%type of {_b}%"
+      set {_btType} to type of {_b}
+      set {_drops::*} to drops of {_b} with {_p}'s tool
+
+      # --- Custom Mining Fortune (lore-based) ---
+      set {_fortuneMult} to 1
+      if ms_fortuneEligible({_b}) is true:
+        set {_mf} to ms_miningFortune({_p})
+        set {_fortuneMult} to 1 + floor({_mf} / 100)
+        if {_fortuneMult} < 1:
+          set {_fortuneMult} to 1
+
+      set {_wgRegen} to false
+      if {wgregen::enabled::%{_wName}%} is true:
+        set {_wgRegen} to true
+
+      # Break the block
+      set block at {_loc} to air
+      make {_p} see damage of {_b} as 0 by {msmine::%{_u}%::animid}
+      set {msmine::%{_u}%::lastdmg} to 0.0
+
+      # Give XP for whitelisted blocks
+      set {_xpAmount} to {@mining_xp_per_block}
+      if {wgblock::xp::%{_wName}%::%{_bt}%} is set:
+        set {_xpAmount} to {wgblock::xp::%{_wName}%::%{_bt}%}
+      addXP({_p}, {_xpAmount})
+
+      if {_wgRegen} is true:
+        set {_sec} to {wgblock::seconds::%{_wName}%::%{_bt}%}
+        if {_sec} is not set:
+          set {_sec} to {@wg_default_seconds}
+
+        set {_ph} to {wgregen::placeholder::%{_wName}%}
+        if {_ph} is not set:
+          set {_ph} to {@wg_default_placeholder}
+
+        # Handle drops with regen - always give drops for whitelisted blocks
+        set {_autoPickup} to false
+        if {wgregen::autopickup::%{_wName}%} is true:
+          set {_autoPickup} to true
+        else if autoPickupEnabled({_p}) is true:
+          set {_autoPickup} to true
+
+        loop {_drops::*}:
+          set {_dropItem} to loop-value
+          ms_spawnMultipliedDrop({_p}, {_dropItem}, {_loc}, {_fortuneMult}, {_autoPickup})
+
+        if "%{_ph}%" is "air":
+          set block at {_loc} to air
+        else:
+          set block at {_loc} to bedrock
+
+        ms_schedule_restore({_loc}, {_btType}, {_sec})
+
+      else:
+        # No regen - handle drops normally (always give drops for whitelisted blocks)
+        set {_autoPickup} to autoPickupEnabled({_p})
+        loop {_drops::*}:
+          set {_dropItem} to loop-value
+          ms_spawnMultipliedDrop({_p}, {_dropItem}, {_loc}, {_fortuneMult}, {_autoPickup})
+      
+      # Clear handled flag after a delay
+      wait 2 ticks
+      delete {wgms::handled::%{_loc}%}
+      ms_clear({_p})
+
+on quit:
+  if player is set:
+    ms_clear(player)

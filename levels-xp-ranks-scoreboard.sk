@@ -1,0 +1,691 @@
+# =========================================================
+# Levels + XP + Ranks + TAB + Chat
+# FIXED for: lr_cc usage, replace-all syntax, sidebar addon calls,
+# date comparisons, id-of-block, clicked item checks, lore separators.
+# No addons required.
+# =========================================================
+
+options:
+  admin_perm: tablevels.admin
+  default_rank: member
+
+  # TAB
+  tab_server_name: &a&lVenture RPG
+  tab_divider: &8&m--------------------
+  website: example.com
+
+  # XP
+  mining_xp: 5
+  xp_actionbar_seconds: 5
+  # below-name objective (vanilla scoreboard)
+  belowname_objective: lr_level
+  belowname_display: &aLvl
+
+# -------------------------
+# Utils / storage
+# -------------------------
+
+function lr_uid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+function lr_level(p: player) :: number:
+  set {_u} to lr_uid({_p})
+  if {level::%{_u}%} is not set:
+    set {level::%{_u}%} to 1
+  return {level::%{_u}%}
+
+function lr_xp(p: player) :: number:
+  set {_u} to lr_uid({_p})
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  return {xp::%{_u}%}
+
+# XP curve (rebalanced; tweak if you want)
+function lr_need(lvl: number) :: number:
+  # modest curve: base + linear + small quadratic
+  set {_l} to {_lvl}
+  if {_l} < 1:
+    set {_l} to 1
+  return 50 + ({_l} * 25) + ({_l} * {_l} * 2)
+
+# Hypixel Skyblock level color progression (changes every 100 levels)
+function lr_levelColor(lvl: number) :: text:
+  set {_band} to floor({_lvl} / 100)
+  # Every 100 levels, cycle through colors (use subtraction instead of modulo)
+  set {_mod} to {_band}
+  while {_mod} >= 12:
+    set {_mod} to {_mod} - 12
+  if {_mod} is 0:
+    return "&7"  # Light Gray (0-99, 1200-1299, etc.)
+  if {_mod} is 1:
+    return "&f"  # White (100-199, 1300-1399, etc.)
+  if {_mod} is 2:
+    return "&a"  # Light Green (200-299, 1400-1499, etc.)
+  if {_mod} is 3:
+    return "&b"  # Aqua (300-399, 1500-1599, etc.)
+  if {_mod} is 4:
+    return "&6"  # Gold (400-499, 1600-1699, etc.)
+  if {_mod} is 5:
+    return "&d"  # Pink (500-599, 1700-1799, etc.)
+  if {_mod} is 6:
+    return "&5"  # Purple (600-699, 1800-1899, etc.)
+  if {_mod} is 7:
+    return "&c"  # Red (700-799, 1900-1999, etc.)
+  if {_mod} is 8:
+    return "&3"  # Cyan (800-899, 2000-2099, etc.)
+  if {_mod} is 9:
+    return "&2"  # Dark Green (900-999, 2100-2199, etc.)
+  if {_mod} is 10:
+    return "&9"  # Blue (1000-1099, 2200-2299, etc.)
+  if {_mod} is 11:
+    return "&4"  # Dark Red (1100-1199, 2300-2399, etc.)
+  return "&7"
+
+function lr_levelBracket(p: player) :: text:
+  set {_lvl} to lr_level({_p})
+  set {_col} to lr_levelColor({_lvl})
+  return "&8[%{_col}%%{_lvl}%&8]&r"
+
+# -------------------------
+# Ranks
+# -------------------------
+
+function lr_rankKeyStored(p: player) :: text:
+  set {_u} to lr_uid({_p})
+  if {rank::%{_u}%} is set:
+    return {rank::%{_u}%}
+  return ""
+
+function lr_rankKeyByPerm(p: player) :: text:
+  set {_best} to "{@default_rank}"
+  set {_bestPrio} to -999999
+  loop {ranks::list::*}:
+    set {_rk} to loop-value
+    set {_perm} to {ranks::%{_rk}%::perm}
+    set {_prio} to {ranks::%{_rk}%::priority}
+    if {_prio} is not set:
+      set {_prio} to 0
+    if {_perm} is set:
+      if {_perm} is not "":
+        if {_p} has permission "%{_perm}%":
+          if {_prio} > {_bestPrio}:
+            set {_bestPrio} to {_prio}
+            set {_best} to {_rk}
+  return {_best}
+
+function lr_rankKey(p: player) :: text:
+  set {_stored} to lr_rankKeyStored({_p})
+  if {_stored} is not "":
+    if {ranks::%{_stored}%::prefix} is set:
+      return {_stored}
+  return lr_rankKeyByPerm({_p})
+
+function lr_rankPrefix(p: player) :: text:
+  set {_rk} to lr_rankKey({_p})
+  if {ranks::%{_rk}%::prefix} is set:
+    return {ranks::%{_rk}%::prefix}
+  return "&7[MEMBER]"
+
+function lr_rankColor(p: player) :: text:
+  set {_rk} to lr_rankKey({_p})
+  if {ranks::%{_rk}%::color} is set:
+    return {ranks::%{_rk}%::color}
+  return "&7"
+
+function lr_displayName(p: player) :: text:
+  set {_col} to lr_rankColor({_p})
+  return "%{_col}%%name of {_p}%&r"
+
+function lr_tabLine(p: player) :: text:
+  set {_pref} to lr_rankPrefix({_p})
+  return "%lr_levelBracket({_p})% &8| %{_pref}% %lr_displayName({_p})%"
+
+# -------------------------
+# TAB apply
+# -------------------------
+
+function lr_applyTab(p: player):
+  set {_serverName} to "&a&lVᴇɴᴛᴜʀᴇ &7Rpg &8(&f%number of all players%&8)"
+  set {_divider} to "&8&m--------------------"
+  set {_website} to "example.com"
+  
+  set {_h} to "%{_serverName}%%nl%&7Welcome, &f%name of {_p}%%nl%%{_divider}%"
+  set {_f} to "%{_divider}%%nl%&7ᴡᴏʀʟᴅ: &f%name of world of {_p}%"
+
+  # Calculate TPS (approximate)
+  set {_tps} to 20.0
+  if {lr::tps::last} is set:
+    set {_timeDiff} to (now - {lr::tps::last}) in milliseconds
+    if {_timeDiff} > 0:
+      set {_expectedTicks} to {_timeDiff} / 50
+      if {lr::tps::ticks} is set:
+        set {_actualTicks} to {lr::tps::ticks}
+        if {_expectedTicks} > 0:
+          set {_tps} to ({_actualTicks} / {_expectedTicks}) * 20
+          if {_tps} > 20:
+            set {_tps} to 20.0
+          if {_tps} < 0:
+            set {_tps} to 0.0
+  set {_tpsStr} to "%round({_tps} * 10) / 10%"
+  set {_f} to "%{_f}% &8| &7ᴛᴘs: &f%{_tpsStr}%"
+
+  set {_f} to "%{_f}%%nl%&7ᴡᴇʙsɪᴛᴇ: &f%{_website}%"
+
+  set tab list header of {_p} to {_h}
+  set tab list footer of {_p} to {_f}
+
+function lr_applyName(p: player):
+  set tab list name of {_p} to lr_tabLine({_p})
+  # Also set display name to include level with rank color
+  set {_lvl} to lr_level({_p})
+  set {_lvlCol} to lr_levelColor({_lvl})
+  set {_col} to lr_rankColor({_p})
+  set display name of {_p} to "%{_col}%%name of {_p}% &8[%{_lvlCol}%%{_lvl}%&8]&r"
+
+function lr_updateBelowName(p: player):
+  set {_lvl} to lr_level({_p})
+  set {_obj} to "lr_level"
+  set {_pName} to name of {_p}
+  # Update scoreboard - use proper command syntax
+  execute console command "scoreboard players set ""%{_pName}%"" %{_obj}% %{_lvl}%"
+
+# --- Split refresh to stop console spam (belowName uses console command)
+function lr_refreshPlayerFast(p: player):
+  lr_applyName({_p})
+  lr_applyTab({_p})
+
+function lr_refreshPlayerFull(p: player):
+  lr_applyName({_p})
+  lr_refreshPlayerFast({_p})
+  lr_updateBelowName({_p})
+
+# -------------------------
+# Setup defaults on load
+# -------------------------
+
+on script load:
+  # Default ranks: MEMBER / MOD / ADMIN / OWNER
+  if {ranks::list::*} is not set:
+    set {ranks::list::1} to "member"
+    set {ranks::list::2} to "mod"
+    set {ranks::list::3} to "admin"
+    set {ranks::list::4} to "owner"
+
+    set {ranks::member::prefix} to "&7Mᴇᴍʙᴇʀ"
+    set {ranks::member::perm} to ""
+    set {ranks::member::priority} to 0
+    set {ranks::member::color} to "&7"
+
+    set {ranks::mod::prefix} to "&2Mᴏᴅ"
+    set {ranks::mod::perm} to "tablevels.rank.mod"
+    set {ranks::mod::priority} to 10
+    set {ranks::mod::color} to "&2"
+
+    set {ranks::admin::prefix} to "&cAᴅᴍɪɴ"
+    set {ranks::admin::perm} to "tablevels.rank.admin"
+    set {ranks::admin::priority} to 20
+    set {ranks::admin::color} to "&c"
+
+    set {ranks::owner::prefix} to "&cOᴡɴᴇʀ"
+    set {ranks::owner::perm} to "tablevels.rank.owner"
+    set {ranks::owner::priority} to 100
+    set {ranks::owner::color} to "&c"
+
+  # below-name objective (vanilla)
+  set {_obj} to "lr_level"
+  set {_disp} to "Lvl"
+  execute console command "scoreboard objectives remove %{_obj}%"
+  wait 1 tick
+  execute console command "scoreboard objectives add %{_obj}% dummy %{_disp}%"
+  wait 1 tick
+  # Note: belowname display slot may not be supported on all server versions
+  # The scoreboard objective is still created and can be used for tracking
+
+  # Apply immediately after reload
+  loop all players:
+    lr_refreshPlayerFull(loop-player)
+
+on join:
+  wait 2 ticks
+  lr_refreshPlayerFull(player)
+
+# OPTIONAL: keep TAB footer stats fresh without scoreboard spam
+every 30 seconds:
+  loop all players:
+    lr_refreshPlayerFast(loop-player)
+
+# -------------------------
+# Chat formatting + rank editor input (single handler)
+# -------------------------
+
+on chat:
+  set {_u} to lr_uid(player)
+
+  # --- Rank assignment input (Sneak+Right-click in /ranks)
+  if {rankassign::%{_u}%::rk} is set:
+    cancel event
+    if message is "cancel":
+      delete {rankassign::%{_u}%::*}
+      message "&cCancelled." to player
+      wait 1 tick
+      lr_openRanks(player)
+      stop
+    if message is "stop":
+      delete {rankassign::%{_u}%::*}
+      message "&cCancelled." to player
+      wait 1 tick
+      lr_openRanks(player)
+      stop
+    set {_t} to message parsed as offline player
+    if {_t} is not set:
+      set {_name} to message
+      loop all players:
+        if name of loop-player is {_name}:
+          set {_t} to loop-player
+          stop loop
+    if {_t} is not set:
+      message "&cThat player must be online. Type their exact name, or &ecancel&c." to player
+      stop
+    set {_rk} to {rankassign::%{_u}%::rk}
+    set {rank::%uuid of {_t}%} to "%{_rk}%"
+    lr_refreshPlayerFull({_t})
+    delete {rankassign::%{_u}%::*}
+    message "&aAssigned &f%name of {_t}%&a to rank &f%{_rk}%&a." to player
+    message "&7Their rank will update immediately." to player
+    wait 1 tick
+    lr_openRanks(player)
+    stop
+
+  # --- Rank editor input
+  if {rankedit::%{_u}%::field} is set:
+    cancel event
+    set {_rk} to {rankedit::%{_u}%::rk}
+    set {_field} to {rankedit::%{_u}%::field}
+
+    if message is "cancel":
+      delete {rankedit::%{_u}%::*}
+      message "&cCancelled." to player
+      wait 1 tick
+      lr_openEditRank(player, {_rk})
+      stop
+
+    if {_field} is "prefix":
+      set {ranks::%{_rk}%::prefix} to message
+      message "&aUpdated prefix for &f%{_rk}%&a." to player
+
+    else if {_field} is "perm":
+      if message is "none":
+        set {ranks::%{_rk}%::perm} to ""
+      else if message is "clear":
+        set {ranks::%{_rk}%::perm} to ""
+      else if message is "-":
+        set {ranks::%{_rk}%::perm} to ""
+      else:
+        set {ranks::%{_rk}%::perm} to message
+      message "&aUpdated permission for &f%{_rk}%&a." to player
+
+    else if {_field} is "prio":
+      set {_n} to message parsed as integer
+      if {_n} is not set:
+        message "&cPriority must be a number. Try again, or type &ecancel&c." to player
+        stop
+      set {ranks::%{_rk}%::priority} to {_n}
+      message "&aUpdated priority for &f%{_rk}%&a." to player
+
+    else if {_field} is "color":
+      set {ranks::%{_rk}%::color} to message
+      message "&aUpdated color for &f%{_rk}%&a." to player
+
+    delete {rankedit::%{_u}%::*}
+
+    # Refresh formatting for everyone (safe: no scoreboard spam)
+    loop all players:
+      lr_refreshPlayerFast(loop-player)
+
+    wait 1 tick
+    lr_openEditRank(player, {_rk})
+    stop
+
+  # --- Normal chat formatting
+  cancel event
+  set {_pref} to lr_rankPrefix(player)
+  set {_lvlbr} to lr_levelBracket(player)
+  set {_name} to lr_displayName(player)
+  broadcast "%{_lvlbr}% &8| %{_pref}% %{_name}%&r &8» &f%message%"
+
+# -------------------------
+# XP gain (mining)
+# -------------------------
+
+on break of stone or deepslate or netherrack or end stone:
+  set {_w} to name of world of player
+  set {_btType} to type of event-block
+  
+  # Check WorldGuard whitelist - only allowlisted blocks give XP (STRICT)
+  set {_allowed} to false
+  
+  # Check bypass
+  if player has permission "tablevels.worldguard.bypass":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.%{_w}%.bypass":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.break":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.%{_w}%.break":
+    set {_allowed} to true
+  
+  # If not bypassed, check whitelist (STRICT - no defaults)
+  if {_allowed} is false:
+    # Check typed allowlist (preferred)
+    if {wgblock::allowtype::%{_w}%::*} is set:
+      if {wgblock::allowtype::%{_w}%::*} contains {_btType}:
+        set {_allowed} to true
+    else if {wgblock::allow::%{_w}%::*} is set:
+      # Legacy text allowlist support
+      set {_btName} to "%type of event-block%"
+      if {wgblock::allow::%{_w}%::*} contains {_btName}:
+        set {_allowed} to true
+  
+  # Only give XP if block is allowed (STRICT)
+  if {_allowed} is false:
+    stop
+
+  set {_u} to lr_uid(player)
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  add {@mining_xp} to {xp::%{_u}%}
+
+  # Action bar (no date comparisons)
+  add 1 to {xpab::%{_u}%::token}
+  set {_tok} to {xpab::%{_u}%::token}
+  set {_lvl} to lr_level(player)
+  set {_need} to lr_need({_lvl})
+  set {_left} to {_need} - {xp::%{_u}%}
+  if {_left} < 0:
+    set {_left} to 0
+  send action bar "&a+{@mining_xp} XP &8(&7%{_left}% to next&8)" to player
+  wait {@xp_actionbar_seconds} seconds
+  if {xpab::%{_u}%::token} is {_tok}:
+    send action bar " " to player
+
+  # Level-ups
+  loop 100 times:
+    set {_lvl2} to lr_level(player)
+    set {_need2} to lr_need({_lvl2})
+    if {xp::%{_u}%} < {_need2}:
+      stop loop
+    remove {_need2} from {xp::%{_u}%}
+    add 1 to {level::%{_u}%}
+    lr_refreshPlayerFull(player)
+    message "&aLevel up! &7You are now level &f%{level::%{_u}%}%&7." to player
+
+# -------------------------
+# /level GUI + admin controls
+# -------------------------
+
+function lr_openLevelGui(p: player):
+  set {_u} to lr_uid({_p})
+  set {_lvl} to lr_level({_p})
+  set {_xp} to lr_xp({_p})
+  set {_need} to lr_need({_lvl})
+  set {_left} to {_need} - {_xp}
+  if {_left} < 0:
+    set {_left} to 0
+
+  set {_pct} to 0
+  if {_need} > 0:
+    set {_pct} to round(({_xp} / {_need}) * 100)
+
+  # Calculate total XP
+  set {_totalXp} to 0
+  set {_calcLvl} to 1
+  while {_calcLvl} < {_lvl}:
+    add lr_need({_calcLvl}) to {_totalXp}
+    add 1 to {_calcLvl}
+  add {_xp} to {_totalXp}
+
+  set {_nextLvl} to {_lvl} + 1
+  set {_nextNeed} to lr_need({_nextLvl})
+
+  set {_inv} to chest inventory with 3 rows named "&8Your Level"
+  
+  # Fill all slots with dark gray glass first
+  set {_i} to 0
+  set {_glass} to black stained glass pane
+  set name of {_glass} to " "
+  while {_i} < 27:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Level display (center)
+  set slot 13 of {_inv} to nether star named "&aLevel %{_lvl}%" with lore "&8" and "&7Total XP: &f%{_totalXp}%" and "&8" and "&eProgress to Next Level" and "&8" and "&7Current XP: &f%{_xp}%&7/&f%{_need}%" and "&7Progress: &f%{_pct}%%%" and "&7XP Remaining: &f%{_left}%"
+  
+  # Next level info
+  set slot 15 of {_inv} to golden apple named "&eNext Level: %{_nextLvl}%" with lore "&8" and "&7XP Needed: &f%{_nextNeed}%" and "&8" and "&aRewards:" and "&f+0.5 &c❤ &7Max Health"
+  
+  # Stats display
+  set slot 11 of {_inv} to book named "&bLevel Statistics" with lore "&8" and "&7Current Level: &f%{_lvl}%" and "&7Current XP: &f%{_xp}%" and "&7XP for Next: &f%{_need}%" and "&7Progress: &f%{_pct}%%%"
+  
+  # Close button
+  set slot 26 of {_inv} to barrier named "&cClose" with lore "&8" and "&7Click to close the menu"
+  open {_inv} to {_p}
+
+command /level:
+  executable by: players
+  trigger:
+    lr_openLevelGui(player)
+
+command /levelset <player> <number>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_t} to arg-1
+    set {_n} to arg-2
+    set {_u} to lr_uid({_t})
+    set {level::%{_u}%} to {_n}
+    if {level::%{_u}%} < 1:
+      set {level::%{_u}%} to 1
+    lr_refreshPlayerFull({_t})
+    message "&aSet level of &f%name of {_t}%&a to &f%{level::%{_u}%}%&a." to sender
+
+command /leveladd <player> <number>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_t} to arg-1
+    set {_add} to arg-2
+    set {_u} to lr_uid({_t})
+    if {level::%{_u}%} is not set:
+      set {level::%{_u}%} to 1
+    add {_add} to {level::%{_u}%}
+    if {level::%{_u}%} < 1:
+      set {level::%{_u}%} to 1
+    lr_refreshPlayerFull({_t})
+    message "&aAdded &f%{_add}%&a levels to &f%name of {_t}%&a." to sender
+
+command /levelxpadd <player> <number>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_t} to arg-1
+    set {_add} to arg-2
+    set {_u} to lr_uid({_t})
+    if {xp::%{_u}%} is not set:
+      set {xp::%{_u}%} to 0
+    add {_add} to {xp::%{_u}%}
+    message "&aAdded &f%{_add}%&a XP to &f%name of {_t}%&a." to sender
+
+# -------------------------
+# Ranks GUI (safe: no taking items)
+# -------------------------
+
+function lr_openRanks(p: player):
+  set {_u} to lr_uid({_p})
+  delete {rankgui::%{_u}%::slotrank::*}
+  set {_inv} to chest inventory with 3 rows named "&8Ranks"
+  set {_slot} to 10
+  loop {ranks::list::*}:
+    set {_rk} to loop-value
+    set {_pref} to {ranks::%{_rk}%::prefix}
+    if {_pref} is not set:
+      set {_pref} to "&7[%{_rk}%]"
+    set {_perm} to {ranks::%{_rk}%::perm}
+    if {_perm} is not set:
+      set {_perm} to ""
+    set {_prio} to {ranks::%{_rk}%::priority}
+    if {_prio} is not set:
+      set {_prio} to 0
+    set slot {_slot} of {_inv} to name tag named "%{_pref}% &8(&7prio %{_prio}%&8)" with lore "&7Key: &f%{_rk}%" and "&7Perm: &f%{_perm}%" and "" and "&aLeft-click: &7Edit rank settings" and "&eRight-click: &7Set your own rank" and "&bSneak+Right-click: &7Assign to player"
+    set {rankgui::%{_u}%::slotrank::%{_slot}%} to "%{_rk}%"
+    add 1 to {_slot}
+  set slot 26 of {_inv} to barrier named "&cClose"
+  open {_inv} to {_p}
+
+function lr_openEditRank(p: player, rk: text):
+  set {_u} to lr_uid({_p})
+  set {rankeditgui::%{_u}%::rk} to "%{_rk}%"
+  set {rankeditgui::%{_u}%::title} to "&8Edit Rank: %{_rk}%"
+
+  set {_pref} to {ranks::%{_rk}%::prefix}
+  if {_pref} is not set:
+    set {_pref} to "&7[%{_rk}%]"
+  set {_perm} to {ranks::%{_rk}%::perm}
+  if {_perm} is not set:
+    set {_perm} to ""
+  set {_prio} to {ranks::%{_rk}%::priority}
+  if {_prio} is not set:
+    set {_prio} to 0
+  set {_col} to {ranks::%{_rk}%::color}
+  if {_col} is not set:
+    set {_col} to "&7"
+
+  set {_inv} to chest inventory with 3 rows named "&8Edit Rank: %{_rk}%"
+  set slot 11 of {_inv} to paper named "&aPrefix" with lore "&7Current: &f%{_pref}%" and "&8Click to change"
+  set slot 13 of {_inv} to tripwire hook named "&ePermission" with lore "&7Current: &f%{_perm}%" and "&8Click to change" and "&8Type 'clear' to remove"
+  set slot 15 of {_inv} to comparator named "&bPriority" with lore "&7Current: &f%{_prio}%" and "&8Click to change"
+  set slot 17 of {_inv} to ink sac named "&dName Color" with lore "&7Current: &f%{_col}%" and "&8Click to change"
+  set slot 26 of {_inv} to barrier named "&cBack"
+  open {_inv} to {_p}
+
+command /ranks:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    lr_openRanks(player)
+
+command /rankset <player> <text>:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    set {_target} to argument 1
+    set {_rk} to argument 2
+    set {_u} to uuid of {_target}
+    
+    # Check if rank exists
+    if {ranks::%{_rk}%::prefix} is not set:
+      message "&cRank &f%{_rk}% &cdoes not exist. Use &e/ranks &cto create ranks." to player
+      stop
+    
+    set {rank::%{_u}%} to "%{_rk}%"
+    lr_refreshPlayerFull({_target})
+    message "&aSet &f%name of {_target}%&a's rank to &f%{_rk}%&a." to player
+    message "&7Their rank will update immediately." to player
+
+on inventory click:
+  # lock GUIs
+  set {_invName} to name of event-inventory
+  if {_invName} is "&8Your Level":
+    cancel event
+    set {_slotNum} to clicked slot
+    if {_slotNum} is set:
+      set {_item} to slot {_slotNum} of event-inventory
+      if {_item} is set:
+        if type of {_item} is barrier:
+          close player's inventory
+    stop
+
+  if {_invName} is "&8Ranks":
+    # Check if clicking in player's own inventory (not GUI)
+    if clicked inventory is player's inventory:
+      stop
+    
+    # This is a GUI click - cancel and handle it
+    cancel event
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+    set {_item} to slot {_slotNum} of event-inventory
+    if {_item} is not set:
+      stop
+    if type of {_item} is barrier:
+      close player's inventory
+      stop
+    if type of {_item} is not name tag:
+      stop
+    set {_u} to lr_uid(player)
+    set {_rk} to {rankgui::%{_u}%::slotrank::%{_slotNum}%}
+    if {_rk} is not set:
+      stop
+
+    # Right-click: set your own stored rank. Sneak+Right-click: assign to another player.
+    if click type is right mouse button:
+      if player is sneaking:
+        # Check if player has admin permission to assign ranks
+        if player does not have permission "{@admin_perm}":
+          message "&cYou need admin permission to assign ranks to other players." to player
+          stop
+        set {rankassign::%{_u}%::rk} to "%{_rk}%"
+        close player's inventory
+        message "&eType the ONLINE player name to assign rank &f%{_rk}%&e." to player
+        message "&7Type &ccancel &7to cancel." to player
+        stop
+      set {rank::%{_u}%} to "%{_rk}%"
+      message "&aStored rank set to &f%{_rk}%&a." to player
+      lr_refreshPlayerFast(player)
+      wait 1 tick
+      lr_openRanks(player)
+      stop
+
+    # Left-click: edit the rank
+    lr_openEditRank(player, {_rk})
+    stop
+
+  set {_u} to lr_uid(player)
+  if {rankeditgui::%{_u}%::title} is set:
+    if name of event-inventory is {rankeditgui::%{_u}%::title}:
+      cancel event
+      set {_slotNum} to clicked slot
+      if {_slotNum} is not set:
+        stop
+      set {_item} to slot {_slotNum} of event-inventory
+      if {_item} is not set:
+        stop
+      set {_rk} to {rankeditgui::%{_u}%::rk}
+      if type of {_item} is barrier:
+        delete {rankeditgui::%{_u}%::*}
+        lr_openRanks(player)
+        stop
+      if type of {_item} is paper:
+        set {rankedit::%{_u}%::rk} to "%{_rk}%"
+        set {rankedit::%{_u}%::field} to "prefix"
+        close player's inventory
+        message "&eType the new PREFIX in chat (supports & codes). Type &ccancel &eto stop." to player
+        stop
+      if type of {_item} is tripwire hook:
+        set {rankedit::%{_u}%::rk} to "%{_rk}%"
+        set {rankedit::%{_u}%::field} to "perm"
+        close player's inventory
+        message "&eType the new PERMISSION in chat. Type &eclear&7/&enone&7 to remove. Type &ccancel &eto stop." to player
+        stop
+      if type of {_item} is comparator:
+        set {rankedit::%{_u}%::rk} to "%{_rk}%"
+        set {rankedit::%{_u}%::field} to "prio"
+        close player's inventory
+        message "&eType the new PRIORITY (number) in chat. Type &ccancel &eto stop." to player
+        stop
+      if type of {_item} is ink sac:
+        set {rankedit::%{_u}%::rk} to "%{_rk}%"
+        set {rankedit::%{_u}%::field} to "color"
+        close player's inventory
+        message "&eType the new NAME COLOR in chat (example: &a or &c or &7). Type &ccancel &eto stop." to player
+        stop

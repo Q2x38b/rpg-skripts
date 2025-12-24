@@ -1,0 +1,290 @@
+options:
+  # ===== Custom stats =====
+  ha_max_hp: 50
+  ha_start_hp: 50
+
+  ha_max_mana: 100
+  ha_start_mana: 100
+  ha_mana_regen_per_second: 5
+
+  # integer for compatibility
+  ha_damage_scale: 1
+
+  # ===== Vanilla hearts (you want 20) =====
+  ha_vanilla_max_health: 20
+
+  # ===== Custom HP regen (slower “natural regen”) =====
+  ha_hp_regen_per_second: 1
+  ha_regen_delay_after_damage_seconds: 6
+
+  # ===== UI update speed =====
+  ha_ui_ticks: 5
+
+  # ===== Autopickup =====
+  autopickup_enabled: true
+  autopickup_perm: "ha.autopickup"
+
+
+# ---------------------------------------------------------
+# Force hearts + hunger (hunger never matters)
+# ---------------------------------------------------------
+function ha_forceUI(p: player):
+  set {_p}'s max health to {@ha_vanilla_max_health}
+  if {_p}'s health is greater than {@ha_vanilla_max_health}:
+    set {_p}'s health to {@ha_vanilla_max_health}
+
+  # keep hunger full always
+  set food level of {_p} to 20
+  set saturation of {_p} to 20
+
+
+# ---------------------------------------------------------
+# Actionbar using vanilla title command (INLINE JSON)
+# ---------------------------------------------------------
+function ha_showActionbar(p: player):
+  set {_u} to uuid of {_p}
+
+  if {ha::hp::%{_u}%} is not set:
+    set {ha::hp::%{_u}%} to {@ha_start_hp}
+  if {ha::mana::%{_u}%} is not set:
+    set {ha::mana::%{_u}%} to {@ha_start_mana}
+
+  # Add equipment bonuses
+  set {_equipHp} to {equip::hp::%{_u}%}
+  if {_equipHp} is not set:
+    set {_equipHp} to 0
+  set {_equipMana} to {equip::mana::%{_u}%}
+  if {_equipMana} is not set:
+    set {_equipMana} to 0
+
+  set {_hpNow} to round({ha::hp::%{_u}%})
+  set {_mnNow} to round({ha::mana::%{_u}%})
+
+  set {_hpMax} to {@ha_max_hp} + {_equipHp}
+  set {_mnMax} to {@ha_max_mana} + {_equipMana}
+
+  # Health numbers white, slash gray, mana blue, divider dark gray
+  set {_txt} to colored "&c❤ &c%{_hpNow}%&7/&c%{_hpMax}%  &8|  &9✎ &9%{_mnNow}%&7/&9%{_mnMax}%"
+
+  send action bar {_txt} to {_p}
+
+# ---------------------------------------------------------
+# Init / Join / Respawn / Death
+# ---------------------------------------------------------
+on load:
+  loop all players:
+    set {_u} to uuid of loop-player
+    if {ha::hp::%{_u}%} is not set:
+      set {ha::hp::%{_u}%} to {@ha_start_hp}
+    if {ha::mana::%{_u}%} is not set:
+      set {ha::mana::%{_u}%} to {@ha_start_mana}
+    wait 1 tick
+    ha_forceUI(loop-player)
+
+on join:
+  set {_u} to uuid of player
+  if {ha::hp::%{_u}%} is not set:
+    set {ha::hp::%{_u}%} to {@ha_start_hp}
+  if {ha::mana::%{_u}%} is not set:
+    set {ha::mana::%{_u}%} to {@ha_start_mana}
+  wait 1 tick
+  ha_forceUI(player)
+
+on respawn:
+  wait 1 tick
+  set {ha::hp::%uuid of player%} to {@ha_start_hp}
+  set {ha::mana::%uuid of player%} to {@ha_start_mana}
+  delete {ha::lastvhp::%uuid of player%}
+  delete {ha::lastDamage::%uuid of player%}
+  ha_forceUI(player)
+
+on death of player:
+  set {ha::hp::%uuid of victim%} to 0
+  delete {ha::lastvhp::%uuid of victim%}
+  delete {ha::lastDamage::%uuid of victim%}
+
+
+# ---------------------------------------------------------
+# Damage -> Custom HP (keep knockback/tilt by allowing tiny hit)
+# ---------------------------------------------------------
+on damage of player:
+  set {_p} to victim
+  set {_u} to uuid of {_p}
+
+  if {_p} is dead:
+    stop
+  if {_p}'s health is less than or equal to 0:
+    stop
+
+  set {ha::lastDamage::%{_u}%} to now
+
+  if {ha::hp::%{_u}%} is not set:
+    set {ha::hp::%{_u}%} to {@ha_start_hp}
+
+  set {_raw} to damage
+
+  # allow small vanilla hit so knockback/tilt still happens
+  set damage to 0.01
+
+  set {_d} to {_raw} * {@ha_damage_scale}
+  if {_d} is less than or equal to 0:
+    stop
+
+  remove {_d} from {ha::hp::%{_u}%}
+  if {ha::hp::%{_u}%} is less than 0:
+    set {ha::hp::%{_u}%} to 0
+
+  # lethal: force real death
+  if {ha::hp::%{_u}%} is less than or equal to 0:
+    set damage to 1000
+    stop
+
+  # resync vanilla hearts next tick
+  wait 1 tick
+  ha_forceUI({_p})
+
+  set {_vmax} to {@ha_vanilla_max_health}
+  set {_cmax} to {@ha_max_hp}
+
+  set {_target} to ({ha::hp::%{_u}%} * {_vmax}) / {_cmax}
+
+  if {_target} is less than 1:
+    set {_target} to 1
+  if {_target} is greater than {_vmax}:
+    set {_target} to {_vmax}
+
+  # ensure visible change per hit (at least 1 vanilla health step)
+  set {_last} to {ha::lastvhp::%{_u}%}
+  if {_last} is not set:
+    set {_last} to {_target}
+
+  if {_target} is less than {_last}:
+    if {_last} - {_target} is less than 1:
+      set {_target} to {_last} - 1
+      if {_target} is less than 1:
+        set {_target} to 1
+
+  set {ha::lastvhp::%{_u}%} to {_target}
+  set {_p}'s health to {_target}
+
+
+# ---------------------------------------------------------
+# Mana regen (1x per second)
+# ---------------------------------------------------------
+every 20 ticks:
+  loop all players:
+    if loop-player is not dead:
+      set {_u} to uuid of loop-player
+      if {ha::mana::%{_u}%} is not set:
+        set {ha::mana::%{_u}%} to {@ha_start_mana}
+      add {@ha_mana_regen_per_second} to {ha::mana::%{_u}%}
+      if {ha::mana::%{_u}%} is greater than {@ha_max_mana}:
+        set {ha::mana::%{_u}%} to {@ha_max_mana}
+
+
+# ---------------------------------------------------------
+# Slower “natural” HP regen (custom HP)
+# Starts only after no damage for X seconds
+# ---------------------------------------------------------
+every 20 ticks:
+  loop all players:
+    if loop-player is not dead:
+      set {_p} to loop-player
+      set {_u} to uuid of {_p}
+
+      if {ha::hp::%{_u}%} is not set:
+        set {ha::hp::%{_u}%} to {@ha_start_hp}
+
+      # only regen if alive and not already full
+      if {ha::hp::%{_u}%} is greater than 0:
+        if {ha::hp::%{_u}%} is less than {@ha_max_hp}:
+          if {ha::lastDamage::%{_u}%} is not set:
+            add {@ha_hp_regen_per_second} to {ha::hp::%{_u}%}
+          else if difference between now and {ha::lastDamage::%{_u}%} is greater than or equal to {@ha_regen_delay_after_damage_seconds} seconds:
+            add {@ha_hp_regen_per_second} to {ha::hp::%{_u}%}
+
+          if {ha::hp::%{_u}%} is greater than {@ha_max_hp}:
+            set {ha::hp::%{_u}%} to {@ha_max_hp}
+
+
+# ---------------------------------------------------------
+# UI loop: force hearts, force hunger, sync hearts to custom HP, show actionbar
+# ---------------------------------------------------------
+every {@ha_ui_ticks} ticks:
+  loop all players:
+    if loop-player is not dead:
+      if loop-player's health is greater than 0:
+        ha_forceUI(loop-player)
+
+        set {_u} to uuid of loop-player
+        if {ha::hp::%{_u}%} is not set:
+          set {ha::hp::%{_u}%} to {@ha_start_hp}
+        if {ha::mana::%{_u}%} is not set:
+          set {ha::mana::%{_u}%} to {@ha_start_mana}
+
+        if {ha::hp::%{_u}%} is greater than 0:
+          set {_target} to ({ha::hp::%{_u}%} * {@ha_vanilla_max_health}) / {@ha_max_hp}
+          if {_target} is less than 1:
+            set {_target} to 1
+          if {_target} is greater than {@ha_vanilla_max_health}:
+            set {_target} to {@ha_vanilla_max_health}
+
+          if loop-player's health is not {_target}:
+            set loop-player's health to {_target}
+
+          ha_showActionbar(loop-player)
+
+
+# ---------------------------------------------------------
+# Autopickup
+# ---------------------------------------------------------
+on break:
+  if {@autopickup_enabled} is false:
+    stop
+  if player does not have permission "ha.autopickup":
+    stop
+
+  set {_b} to event-block
+  set {_w} to name of world of player
+  set {_btType} to type of {_b}
+  
+  # Check WorldGuard whitelist - only allowlisted blocks get autopickup (STRICT)
+  set {_allowed} to false
+  
+  # Check bypass
+  if player has permission "tablevels.worldguard.bypass":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.%{_w}%.bypass":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.break":
+    set {_allowed} to true
+  else if player has permission "tablevels.worldguard.%{_w}%.break":
+    set {_allowed} to true
+  
+  # If not bypassed, check whitelist (STRICT - no defaults)
+  if {_allowed} is false:
+    # Check typed allowlist (preferred)
+    if {wgblock::allowtype::%{_w}%::*} is set:
+      if {wgblock::allowtype::%{_w}%::*} contains {_btType}:
+        set {_allowed} to true
+    else if {wgblock::allow::%{_w}%::*} is set:
+      # Legacy text allowlist support
+      set {_btName} to "%type of {_b}%"
+      if {wgblock::allow::%{_w}%::*} contains {_btName}:
+        set {_allowed} to true
+  
+  # Only autopickup if block is allowed (STRICT)
+  if {_allowed} is false:
+    stop
+
+  set {_loc} to location of {_b}
+  set {_drops::*} to drops of {_b}
+
+  cancel event
+  set block at {_loc} to air
+
+  loop {_drops::*}:
+    if player has space for loop-value:
+      give loop-value to player
+    else:
+      drop loop-value at {_loc}

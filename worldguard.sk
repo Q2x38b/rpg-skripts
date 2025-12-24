@@ -1,0 +1,845 @@
+options:
+  wg_admin_perm: tablevels.admin
+  wg_bypass_perm: tablevels.worldguard.bypass
+  wg_perm_prefix: tablevels.worldguard
+
+  # Regen mining defaults
+  wg_regen_default_enabled: true
+  wg_regen_default_autopickup: true
+  wg_regen_default_placeholder: "bedrock" # "bedrock" or "air"
+  wg_regen_default_seconds: 20
+
+  # World permission defaults (true = restricted/blocked)
+  wg_default_break_restrict: false
+  wg_default_place_restrict: false
+  wg_default_interact_restrict: false
+  wg_default_open_restrict: false
+  wg_default_container_restrict: false
+  wg_default_useitem_restrict: false
+  wg_default_entityinteract_restrict: false
+  wg_default_fishing_restrict: false
+  wg_default_drop_restrict: false
+  wg_default_pickup_restrict: false
+  wg_default_pvp_restrict: false
+  wg_default_mobhit_mode: "all" # all/none/allowlist/denylist
+
+# ----------------------------
+# Helpers
+# ----------------------------
+
+function wg_cc(t: text) :: text:
+  # simple colorize helper; avoids clashing with other scripts by unique name
+  set {_s} to {_t}
+  replace all "&" with "§" in {_s}
+  return {_s}
+
+function wg_is_admin(p: player) :: boolean:
+  if {_p} has permission "{@wg_admin_perm}":
+    return true
+  return false
+
+function wg_has_bypass(p: player, wName: text, action: text) :: boolean:
+  # full bypass
+  if {_p} has permission "{@wg_bypass_perm}":
+    return true
+  # per-world bypass
+  if {_p} has permission "{@wg_perm_prefix}.%{_wName}%.bypass":
+    return true
+  # action bypass (global or per-world)
+  if {_p} has permission "{@wg_perm_prefix}.%{_action}%":
+    return true
+  if {_p} has permission "{@wg_perm_prefix}.%{_wName}%.%{_action}%":
+    return true
+  return false
+
+function wg_init_world(wName: text):
+  if {wgperm::break::%{_wName}%} is not set:
+    set {wgperm::break::%{_wName}%} to {@wg_default_break_restrict}
+  if {wgperm::place::%{_wName}%} is not set:
+    set {wgperm::place::%{_wName}%} to {@wg_default_place_restrict}
+  if {wgperm::interact::%{_wName}%} is not set:
+    set {wgperm::interact::%{_wName}%} to {@wg_default_interact_restrict}
+  if {wgperm::open::%{_wName}%} is not set:
+    set {wgperm::open::%{_wName}%} to {@wg_default_open_restrict}
+  if {wgperm::container::%{_wName}%} is not set:
+    set {wgperm::container::%{_wName}%} to {@wg_default_container_restrict}
+  if {wgperm::useitem::%{_wName}%} is not set:
+    set {wgperm::useitem::%{_wName}%} to {@wg_default_useitem_restrict}
+  if {wgperm::entityinteract::%{_wName}%} is not set:
+    set {wgperm::entityinteract::%{_wName}%} to {@wg_default_entityinteract_restrict}
+  if {wgperm::fishing::%{_wName}%} is not set:
+    set {wgperm::fishing::%{_wName}%} to {@wg_default_fishing_restrict}
+  if {wgperm::drop::%{_wName}%} is not set:
+    set {wgperm::drop::%{_wName}%} to {@wg_default_drop_restrict}
+  if {wgperm::pickup::%{_wName}%} is not set:
+    set {wgperm::pickup::%{_wName}%} to {@wg_default_pickup_restrict}
+  if {wgperm::pvp::%{_wName}%} is not set:
+    set {wgperm::pvp::%{_wName}%} to {@wg_default_pvp_restrict}
+  if {wgperm::mobhitmode::%{_wName}%} is not set:
+    set {wgperm::mobhitmode::%{_wName}%} to {@wg_default_mobhit_mode}
+
+  # regen defaults
+  if {wgregen::enabled::%{_wName}%} is not set:
+    set {wgregen::enabled::%{_wName}%} to {@wg_regen_default_enabled}
+  if {wgregen::autopickup::%{_wName}%} is not set:
+    set {wgregen::autopickup::%{_wName}%} to {@wg_regen_default_autopickup}
+  if {wgregen::placeholder::%{_wName}%} is not set:
+    set {wgregen::placeholder::%{_wName}%} to {@wg_regen_default_placeholder}
+
+# ----------------------------
+# GUIs
+# ----------------------------
+
+function wg_open_perms_gui(p: player, wName: text):
+  wg_init_world({_wName})
+  set {_inv} to chest inventory with 6 rows named wg_cc("&8World Perms &7(%{_wName}%)")
+
+  # helper for toggle items
+  # Break
+  if {wgperm::break::%{_wName}%} is true:
+    set slot 10 of {_inv} to lime dye named wg_cc("&aBreak: Restricted") with lore wg_cc("&7Breaking is blocked here.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 10 of {_inv} to gray dye named wg_cc("&7Break: Allowed") with lore wg_cc("&7Breaking is allowed here.") and wg_cc("&8Click to restrict.")
+
+  # Place
+  if {wgperm::place::%{_wName}%} is true:
+    set slot 11 of {_inv} to lime dye named wg_cc("&aPlace: Restricted") with lore wg_cc("&7Placing is blocked here.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 11 of {_inv} to gray dye named wg_cc("&7Place: Allowed") with lore wg_cc("&7Placing is allowed here.") and wg_cc("&8Click to restrict.")
+
+  # Interact (workstations etc.)
+  if {wgperm::interact::%{_wName}%} is true:
+    set slot 12 of {_inv} to lime dye named wg_cc("&aInteract: Restricted") with lore wg_cc("&7Interactables are blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 12 of {_inv} to gray dye named wg_cc("&7Interact: Allowed") with lore wg_cc("&7Interactables are allowed.") and wg_cc("&8Click to restrict.")
+
+  # Openables (doors/trapdoors/fence gates)
+  if {wgperm::open::%{_wName}%} is true:
+    set slot 13 of {_inv} to lime dye named wg_cc("&aOpenables: Restricted") with lore wg_cc("&7Doors/gates/trapdoors blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 13 of {_inv} to gray dye named wg_cc("&7Openables: Allowed") with lore wg_cc("&7Doors/gates/trapdoors allowed.") and wg_cc("&8Click to restrict.")
+
+  # Containers
+  if {wgperm::container::%{_wName}%} is true:
+    set slot 14 of {_inv} to lime dye named wg_cc("&aContainers: Restricted") with lore wg_cc("&7Containers are blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 14 of {_inv} to gray dye named wg_cc("&7Containers: Allowed") with lore wg_cc("&7Containers are allowed.") and wg_cc("&8Click to restrict.")
+
+  # Use item
+  if {wgperm::useitem::%{_wName}%} is true:
+    set slot 15 of {_inv} to lime dye named wg_cc("&aUse Item: Restricted") with lore wg_cc("&7Right-click item use blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 15 of {_inv} to gray dye named wg_cc("&7Use Item: Allowed") with lore wg_cc("&7Right-click item use allowed.") and wg_cc("&8Click to restrict.")
+
+  # Entity interact
+  if {wgperm::entityinteract::%{_wName}%} is true:
+    set slot 16 of {_inv} to lime dye named wg_cc("&aEntity Interact: Restricted") with lore wg_cc("&7Right-clicking entities blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 16 of {_inv} to gray dye named wg_cc("&7Entity Interact: Allowed") with lore wg_cc("&7Right-clicking entities allowed.") and wg_cc("&8Click to restrict.")
+
+  # Fishing
+  if {wgperm::fishing::%{_wName}%} is true:
+    set slot 19 of {_inv} to lime dye named wg_cc("&aFishing: Restricted") with lore wg_cc("&7Fishing is blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 19 of {_inv} to gray dye named wg_cc("&7Fishing: Allowed") with lore wg_cc("&7Fishing is allowed.") and wg_cc("&8Click to restrict.")
+
+  # Drop
+  if {wgperm::drop::%{_wName}%} is true:
+    set slot 20 of {_inv} to lime dye named wg_cc("&aDrop: Restricted") with lore wg_cc("&7Dropping items blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 20 of {_inv} to gray dye named wg_cc("&7Drop: Allowed") with lore wg_cc("&7Dropping items allowed.") and wg_cc("&8Click to restrict.")
+
+  # Pickup
+  if {wgperm::pickup::%{_wName}%} is true:
+    set slot 21 of {_inv} to lime dye named wg_cc("&aPickup: Restricted") with lore wg_cc("&7Picking up items blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 21 of {_inv} to gray dye named wg_cc("&7Pickup: Allowed") with lore wg_cc("&7Picking up items allowed.") and wg_cc("&8Click to restrict.")
+
+  # PvP
+  if {wgperm::pvp::%{_wName}%} is true:
+    set slot 22 of {_inv} to lime dye named wg_cc("&aPvP: Restricted") with lore wg_cc("&7PvP is blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 22 of {_inv} to gray dye named wg_cc("&7PvP: Allowed") with lore wg_cc("&7PvP is allowed.") and wg_cc("&8Click to restrict.")
+
+  # Mobhit mode
+  set {_mm} to {wgperm::mobhitmode::%{_wName}%}
+  if {_mm} is not set:
+    set {_mm} to {@wg_default_mobhit_mode}
+  set slot 23 of {_inv} to iron sword named wg_cc("&fMob Hit Mode: &e%{_mm}%") with lore wg_cc("&7Click to cycle.") and wg_cc("&8(all/none/allowlist/denylist)")
+
+  # Block customization button
+  set slot 45 of {_inv} to comparator named wg_cc("&fBlock Whitelist") with lore wg_cc("&7Configure allowed blocks.") and wg_cc("&8Click to open.")
+
+  set slot 53 of {_inv} to barrier named wg_cc("&cClose")
+
+  set {wggui::open::%uuid of {_p}%} to true
+  set {wggui::type::%uuid of {_p}%} to "perms"
+  set {wggui::world::%uuid of {_p}%} to {_wName}
+  open {_inv} to {_p}
+
+function wg_open_blocks_gui(p: player, wName: text):
+  wg_init_world({_wName})
+  set {_inv} to chest inventory with 6 rows named wg_cc("&8Block Whitelist &7(%{_wName}%)")
+
+  # Whitelist Mode (always enabled - this is now a whitelist system)
+  set slot 10 of {_inv} to lime dye named wg_cc("&aWhitelist Mode: Active") with lore wg_cc("&7Only whitelisted blocks can be broken.") and wg_cc("&7This is always enabled.")
+
+  # Autopickup
+  if {wgregen::autopickup::%{_wName}%} is true:
+    set slot 11 of {_inv} to hopper named wg_cc("&aAutopickup: Enabled") with lore wg_cc("&7Drops go straight to inventory.") and wg_cc("&8Click to disable.")
+  else:
+    set slot 11 of {_inv} to chest named wg_cc("&7Autopickup: Disabled") with lore wg_cc("&7Drops are dropped normally.") and wg_cc("&8Click to enable.")
+
+  # Placeholder
+  set {_ph} to {wgregen::placeholder::%{_wName}%}
+  if {_ph} is not set:
+    set {_ph} to {@wg_regen_default_placeholder}
+  if {_ph} is "air":
+    set slot 12 of {_inv} to barrier named wg_cc("&fPlaceholder: &7Air") with lore wg_cc("&7Block becomes air during cooldown.") and wg_cc("&8Click to switch to Bedrock.")
+  else:
+    set slot 12 of {_inv} to bedrock named wg_cc("&fPlaceholder: &7Bedrock") with lore wg_cc("&7Block becomes bedrock during cooldown.") and wg_cc("&8Click to switch to Air.")
+
+  # Add/remove/set seconds (from hand)
+  set slot 23 of {_inv} to lime stained glass pane named wg_cc("&aAdd from Hand") with lore wg_cc("&7Hold a block item.") and wg_cc("&8Click to add to whitelist.")
+  set slot 24 of {_inv} to red stained glass pane named wg_cc("&cRemove from Hand") with lore wg_cc("&7Hold a block item.") and wg_cc("&8Click to remove from whitelist.")
+  set slot 25 of {_inv} to clock named wg_cc("&eSet Regen Seconds") with lore wg_cc("&7Hold a block item.") and wg_cc("&8Click then type seconds in chat.")
+
+  # List first 28 allowlisted blocks
+  set {_slot} to 0
+  loop {wgblock::allowtype::%{_wName}%::*}:
+    add 1 to {_slot}
+    if {_slot} > 28:
+      stop
+    set {_bt} to loop-value
+    set {_key} to "%{_bt}%"
+    set {_sec} to {wgblock::seconds::%{_wName}%::%{_key}%}
+    if {_sec} is not set:
+      set {_sec} to {@wg_regen_default_seconds}
+    set {_showSlot} to 26 + {_slot}
+    set slot {_showSlot} of {_inv} to {_bt} named wg_cc("&f%{_key}%") with lore wg_cc("&7Regen: &e%{_sec}%s")
+
+  set slot 45 of {_inv} to arrow named wg_cc("&7Back to Permissions")
+  set slot 53 of {_inv} to barrier named wg_cc("&cClose")
+
+  set {wggui::open::%uuid of {_p}%} to true
+  set {wggui::type::%uuid of {_p}%} to "blocks"
+  set {wggui::world::%uuid of {_p}%} to {_wName}
+  open {_inv} to {_p}
+
+# ----------------------------
+# Commands
+# ----------------------------
+
+command /wgperms [<text>]:
+  trigger:
+    if wg_is_admin(player) is false:
+      send wg_cc("&cNo permission.") to player
+      stop
+    set {_wName} to argument 1
+    if {_wName} is not set:
+      set {_wName} to name of world of player
+    wg_open_perms_gui(player, {_wName})
+
+command /wgblocks [<text>]:
+  trigger:
+    if wg_is_admin(player) is false:
+      send wg_cc("&cNo permission.") to player
+      stop
+    set {_wName} to argument 1
+    if {_wName} is not set:
+      set {_wName} to name of world of player
+    wg_open_blocks_gui(player, {_wName})
+
+# ----------------------------
+# GUI Click Handling (LOCKED)
+# ----------------------------
+
+on inventory click:
+  set {_invName} to name of event-inventory
+  set {_u} to uuid of player
+  
+  # Check if it's a WorldGuard GUI
+  set {_isWgGui} to false
+  if {_invName} contains "World Perms":
+    set {_isWgGui} to true
+  if {_invName} contains "Block Whitelist":
+    set {_isWgGui} to true
+  if {_isWgGui} is true:
+    cancel event
+    set {_wName} to {wggui::world::%{_u}%}
+    if {_wName} is not set:
+      stop
+    set {_type} to {wggui::type::%{_u}%}
+    if {_type} is not set:
+      if {_invName} contains "World Perms":
+        set {_type} to "perms"
+      else if {_invName} contains "Block Whitelist":
+        set {_type} to "blocks"
+      else:
+        stop
+  if {_type} is "perms":
+    if clicked slot is 10:
+      if {wgperm::break::%{_wName}%} is true:
+        set {wgperm::break::%{_wName}%} to false
+      else:
+        set {wgperm::break::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 11:
+      if {wgperm::place::%{_wName}%} is true:
+        set {wgperm::place::%{_wName}%} to false
+      else:
+        set {wgperm::place::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 12:
+      if {wgperm::interact::%{_wName}%} is true:
+        set {wgperm::interact::%{_wName}%} to false
+      else:
+        set {wgperm::interact::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 13:
+      if {wgperm::open::%{_wName}%} is true:
+        set {wgperm::open::%{_wName}%} to false
+      else:
+        set {wgperm::open::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 14:
+      if {wgperm::container::%{_wName}%} is true:
+        set {wgperm::container::%{_wName}%} to false
+      else:
+        set {wgperm::container::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 15:
+      if {wgperm::useitem::%{_wName}%} is true:
+        set {wgperm::useitem::%{_wName}%} to false
+      else:
+        set {wgperm::useitem::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 16:
+      if {wgperm::entityinteract::%{_wName}%} is true:
+        set {wgperm::entityinteract::%{_wName}%} to false
+      else:
+        set {wgperm::entityinteract::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 19:
+      if {wgperm::fishing::%{_wName}%} is true:
+        set {wgperm::fishing::%{_wName}%} to false
+      else:
+        set {wgperm::fishing::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 20:
+      if {wgperm::drop::%{_wName}%} is true:
+        set {wgperm::drop::%{_wName}%} to false
+      else:
+        set {wgperm::drop::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 21:
+      if {wgperm::pickup::%{_wName}%} is true:
+        set {wgperm::pickup::%{_wName}%} to false
+      else:
+        set {wgperm::pickup::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 22:
+      if {wgperm::pvp::%{_wName}%} is true:
+        set {wgperm::pvp::%{_wName}%} to false
+      else:
+        set {wgperm::pvp::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 23:
+      set {_mm} to {wgperm::mobhitmode::%{_wName}%}
+      if {_mm} is not set:
+        set {_mm} to {@wg_default_mobhit_mode}
+      if {_mm} is "all":
+        set {wgperm::mobhitmode::%{_wName}%} to "none"
+      else if {_mm} is "none":
+        set {wgperm::mobhitmode::%{_wName}%} to "allowlist"
+      else if {_mm} is "allowlist":
+        set {wgperm::mobhitmode::%{_wName}%} to "denylist"
+      else:
+        set {wgperm::mobhitmode::%{_wName}%} to "all"
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 45:
+      wait 1 tick
+      wg_open_blocks_gui(player, {_wName})
+      stop
+
+    if clicked slot is 53:
+      close player's inventory
+      stop
+
+  if {_type} is "blocks":
+    if clicked slot is 10:
+      # Whitelist mode is always enabled - no toggle needed
+      send wg_cc("&7Whitelist mode is always active. Only whitelisted blocks can be broken.") to player
+      stop
+
+    if clicked slot is 11:
+      if {wgregen::autopickup::%{_wName}%} is true:
+        set {wgregen::autopickup::%{_wName}%} to false
+      else:
+        set {wgregen::autopickup::%{_wName}%} to true
+      wait 1 tick
+      wg_open_blocks_gui(player, {_wName})
+      stop
+
+    if clicked slot is 12:
+      set {_ph} to {wgregen::placeholder::%{_wName}%}
+      if {_ph} is not set:
+        set {_ph} to {@wg_regen_default_placeholder}
+      if {_ph} is "air":
+        set {wgregen::placeholder::%{_wName}%} to "bedrock"
+      else:
+        set {wgregen::placeholder::%{_wName}%} to "air"
+      wait 1 tick
+      wg_open_blocks_gui(player, {_wName})
+      stop
+
+    if clicked slot is 23:
+      if player's tool is air:
+        send wg_cc("&cHold a block item in your hand.") to player
+        stop
+      set {_bt} to type of player's tool
+      add {_bt} to {wgblock::allowtype::%{_wName}%::*}
+      send wg_cc("&aAdded &f%{_bt}% &ato whitelist.") to player
+      wait 1 tick
+      wg_open_blocks_gui(player, {_wName})
+      stop
+
+    if clicked slot is 24:
+      if player's tool is air:
+        send wg_cc("&cHold a block item in your hand.") to player
+        stop
+      set {_bt} to type of player's tool
+      remove {_bt} from {wgblock::allowtype::%{_wName}%::*}
+      send wg_cc("&cRemoved &f%{_bt}% &cfrom whitelist.") to player
+      wait 1 tick
+      wg_open_blocks_gui(player, {_wName})
+      stop
+
+    if clicked slot is 25:
+      if player's tool is air:
+        send wg_cc("&cHold a block item in your hand.") to player
+        stop
+      set {_bt} to type of player's tool
+      set {_key} to "%{_bt}%"
+      set {wgchat::expect::%uuid of player%} to "seconds"
+      set {wgchat::world::%uuid of player%} to {_wName}
+      set {wgchat::blockkey::%uuid of player%} to {_key}
+      close player's inventory
+      send wg_cc("&eType regen seconds in chat for &f%{_key}%&e. Type &fcancel &eto cancel.") to player
+      stop
+
+    if clicked slot is 45:
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 53:
+      close player's inventory
+      stop
+
+on inventory drag:
+  if {wggui::open::%uuid of player%} is true:
+    cancel event
+
+on inventory close:
+  set {_u} to uuid of player
+  set {_title} to name of event-inventory
+  if {_title} is not set:
+    delete {wggui::open::%{_u}%}
+    delete {wggui::type::%{_u}%}
+    delete {wggui::world::%{_u}%}
+    stop
+
+  # If not in either GUI, clear
+  set {_inWgGui} to false
+  if {_title} contains "World Perms":
+    set {_inWgGui} to true
+  if {_title} contains "Block Whitelist":
+    set {_inWgGui} to true
+
+  if {_inWgGui} is false:
+    delete {wggui::open::%{_u}%}
+    delete {wggui::type::%{_u}%}
+    delete {wggui::world::%{_u}%}
+
+# ----------------------------
+# Chat input (regen seconds)
+# ----------------------------
+
+on chat:
+  if {wgchat::expect::%uuid of player%} is not set:
+    stop
+  cancel event
+  set {_msg} to message
+  if {_msg} is "cancel":
+    delete {wgchat::expect::%uuid of player%}
+    delete {wgchat::world::%uuid of player%}
+    delete {wgchat::blockkey::%uuid of player%}
+    send wg_cc("&7Cancelled.") to player
+    stop
+
+  set {_sec} to {_msg} parsed as integer
+  if {_sec} is not set:
+    send wg_cc("&cPlease type a number (seconds) or 'cancel'.") to player
+    stop
+  if {_sec} < 1:
+    send wg_cc("&cSeconds must be 1 or more.") to player
+    stop
+  if {_sec} > 86400:
+    send wg_cc("&cMax is 86400 seconds (24h).") to player
+    stop
+
+  set {_wName} to {wgchat::world::%uuid of player%}
+  set {_key} to {wgchat::blockkey::%uuid of player%}
+  set {wgblock::seconds::%{_wName}%::%{_key}%} to {_sec}
+
+  delete {wgchat::expect::%uuid of player%}
+  delete {wgchat::world::%uuid of player%}
+  delete {wgchat::blockkey::%uuid of player%}
+
+  send wg_cc("&aSet regen seconds for &f%{_key}% &ato &e%{_sec}%s&a.") to player
+  wait 1 tick
+  wg_open_blocks_gui(player, {_wName})
+
+# ----------------------------
+# Enforcement Events
+# ----------------------------
+
+# Break restriction - WHITELIST SYSTEM (only allowlisted blocks can be broken)
+on break:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+
+  # Check bypass first
+  if wg_has_bypass(player, {_wName}, "break") is true:
+    stop
+
+  # WHITELIST CHECK: Only allowlisted blocks can be broken (STRICT - no defaults)
+  set {_btType} to type of event-block
+  set {_key} to "%{_btType}%"
+  set {_allowed} to false
+
+  # Check typed allowlist (preferred)
+  if {wgblock::allowtype::%{_wName}%::*} is set:
+    if {wgblock::allowtype::%{_wName}%::*} contains {_btType}:
+      set {_allowed} to true
+  else if {wgblock::allow::%{_wName}%::*} is set:
+    # Legacy text allowlist support
+    set {_btName} to "%type of event-block%"
+    if {wgblock::allow::%{_wName}%::*} contains {_btName}:
+      set {_allowed} to true
+
+  # STRICT: If not allowed, cancel (no default allowed blocks)
+  if {_allowed} is false:
+    cancel event
+    stop
+
+  # Regen mining: handle allowlisted blocks with cooldown (ALL TOOLS - vanilla and custom)
+  if {wgregen::enabled::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "break") is false:
+      set {_loc} to location of event-block
+
+      # Prevent double-handling if custom mining script marks it
+      if {wgms::handled::%{_loc}%} is true:
+        cancel event
+        stop
+
+      # cooldown active?
+      if {wgregen::token::%{_loc}%} is set:
+        cancel event
+        stop
+
+      set {_btType} to type of event-block
+      set {_key} to "%{_btType}%"
+
+      # seconds
+      set {_secRaw} to {wgblock::seconds::%{_wName}%::%{_key}%}
+      set {_sec} to {_secRaw} parsed as integer
+      if {_sec} is not set:
+        set {_sec} to {@wg_regen_default_seconds}
+      if {_sec} < 1:
+        set {_sec} to {@wg_regen_default_seconds}
+
+      # placeholder
+      set {_ph} to {wgregen::placeholder::%{_wName}%}
+      if {_ph} is not set:
+        set {_ph} to {@wg_regen_default_placeholder}
+
+      # token + original type
+      set {_token} to random integer between 1 and 2000000000
+      set {wgregen::token::%{_loc}%} to {_token}
+      set {wgregen::origtype::%{_loc}%} to {_btType}
+
+      # compute drops BEFORE changing the block
+      set {_drops::*} to drops of event-block with player's tool
+
+      cancel event
+
+      # Give XP for breaking whitelisted block
+      set {_xpAmount} to 4
+      if {wgblock::xp::%{_wName}%::%{_key}%} is set:
+        set {_xpAmount} to {wgblock::xp::%{_wName}%::%{_key}%}
+      set {_u} to uuid of player
+      if {xp::%{_u}%} is not set:
+        set {xp::%{_u}%} to 0
+      add {_xpAmount} to {xp::%{_u}%}
+
+      # set placeholder immediately and again next tick (prevents "instant regen" / client rollback)
+      if {_ph} is "air":
+        set block at {_loc} to air
+      else:
+        set block at {_loc} to bedrock
+      wait 1 tick
+      if {_ph} is "air":
+        set block at {_loc} to air
+      else:
+        set block at {_loc} to bedrock
+
+      # give / drop items (with fortune multiplier if applicable)
+      set {_fortuneMult} to 1
+      # Check for custom mining fortune from accessories/equipment
+      if {equip::fortune::%{_u}%} is set:
+        set {_mf} to {equip::fortune::%{_u}%}
+        set {_fortuneMult} to 1 + floor({_mf} / 100)
+        if {_fortuneMult} < 1:
+          set {_fortuneMult} to 1
+      
+      if {wgregen::autopickup::%{_wName}%} is true:
+        loop {_drops::*}:
+          set {_dropItem} to loop-value-1
+          if {_fortuneMult} > 1:
+            # Use custom mining drop function for fortune
+            ms_spawnMultipliedDrop(player, {_dropItem}, {_loc}, {_fortuneMult}, true)
+          else:
+            if player's inventory can hold {_dropItem}:
+              give {_dropItem} to player
+            else:
+              drop {_dropItem} at {_loc}
+      else:
+        loop {_drops::*}:
+          set {_dropItem} to loop-value-1
+          if {_fortuneMult} > 1:
+            ms_spawnMultipliedDrop(player, {_dropItem}, {_loc}, {_fortuneMult}, false)
+          else:
+            drop {_dropItem} at {_loc}
+
+      wait {_sec} * 20 ticks
+      if {wgregen::token::%{_loc}%} is {_token}:
+        set {_restore} to {wgregen::origtype::%{_loc}%}
+        if {_restore} is set:
+          set block at {_loc} to {_restore}
+        delete {wgregen::token::%{_loc}%}
+        delete {wgregen::origtype::%{_loc}%}
+      stop
+
+on place:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::place::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "place") is false:
+      cancel event
+
+# Protect farmland from being trampled - restore farmland if dirt has crops above
+every 2 ticks:
+  loop all players:
+    set {_p} to loop-player
+    set {_loc} to location of {_p}
+    set {_x} to x-coordinate of {_loc}
+    set {_y} to y-coordinate of {_loc} - 1
+    set {_z} to z-coordinate of {_loc}
+    set {_w} to world of {_loc}
+    set {_block} to block at location at {_x}, {_y}, {_z} in {_w}
+    set {_bt} to type of {_block}
+    set {_btStr} to "%{_bt}%"
+    if {_btStr} is "dirt":
+      # Check if there's a crop above that should protect this farmland
+      set {_above} to block at {_loc}
+      set {_aboveStr} to "%type of {_above}%"
+      if {_aboveStr} is "wheat":
+        set block at location at {_x}, {_y}, {_z} in {_w} to farmland
+        stop
+      if {_aboveStr} is "carrots":
+        set block at location at {_x}, {_y}, {_z} in {_w} to farmland
+        stop
+      if {_aboveStr} is "potatoes":
+        set block at location at {_x}, {_y}, {_z} in {_w} to farmland
+        stop
+      if {_aboveStr} is "beetroots":
+        set block at location at {_x}, {_y}, {_z} in {_w} to farmland
+        stop
+
+# Interactables + openables + containers (use right click events)
+on right click:
+  if clicked block is not set:
+    stop
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+
+  if wg_has_bypass(player, {_wName}, "interact") is true:
+    stop
+
+  set {_t} to "%type of clicked block%"
+
+  # Openables (doors/trapdoors/fence gates) — substring matching for variants
+  set {_isOpenable} to false
+  if {_t} contains "door":
+    set {_isOpenable} to true
+  if {_t} contains "trapdoor":
+    set {_isOpenable} to true
+  if {_t} contains "fence gate":
+    set {_isOpenable} to true
+
+  if {_isOpenable} is true:
+    if {wgperm::open::%{_wName}%} is true:
+      cancel event
+    stop
+
+  # Containers
+  set {_isContainer} to false
+  if {_t} contains "chest":
+    set {_isContainer} to true
+  if {_t} contains "barrel":
+    set {_isContainer} to true
+  if {_t} contains "shulker box":
+    set {_isContainer} to true
+  if {_t} is "ender chest":
+    set {_isContainer} to true
+
+  if {_isContainer} is true:
+    if {wgperm::container::%{_wName}%} is true:
+      cancel event
+    stop
+
+  # Other interactables/workstations/buttons/etc.
+  if {wgperm::interact::%{_wName}%} is true:
+    cancel event
+
+on right click:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::useitem::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "useitem") is false:
+      cancel event
+
+on right click on entity:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::entityinteract::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "entityinteract") is false:
+      cancel event
+
+on drop:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::drop::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "drop") is false:
+      cancel event
+
+on pickup:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::pickup::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "pickup") is false:
+      cancel event
+
+on damage of player:
+  set {_wName} to name of world of victim
+  wg_init_world({_wName})
+  if attacker is a player:
+    if {wgperm::pvp::%{_wName}%} is true:
+      if wg_has_bypass(attacker, {_wName}, "pvp") is false:
+        cancel event
+
+# Protect crops and farmland from trampling
+on block fade:
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  if {_btStr} is "wheat":
+    cancel event
+    stop
+  if {_btStr} is "carrots":
+    cancel event
+    stop
+  if {_btStr} is "potatoes":
+    cancel event
+    stop
+  if {_btStr} is "beetroots":
+    cancel event
+    stop
+  if {_btStr} is "farmland":
+    cancel event
+    stop
+
+
+on damage of living entity:
+  if attacker is not a player:
+    stop
+  set {_wName} to name of world of victim
+  wg_init_world({_wName})
+
+  if wg_has_bypass(attacker, {_wName}, "mobhit") is true:
+    stop
+
+  set {_mm} to {wgperm::mobhitmode::%{_wName}%}
+  if {_mm} is not set:
+    set {_mm} to {@wg_default_mobhit_mode}
+  if {_mm} is "all":
+    stop
+  if {_mm} is "none":
+    cancel event
+    stop
+  if {_mm} is "allowlist":
+    set {_e} to "%type of victim%"
+    if {wgmob::allow::%{_wName}%::%{_e}%} is not set:
+      cancel event
+    stop
+  if {_mm} is "denylist":
+    set {_e} to "%type of victim%"
+    if {wgmob::deny::%{_wName}%::%{_e}%} is set:
+      cancel event
+    stop
+
+on fishing state change:
+  if event-fishing state is not fish caught:
+    stop
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::fishing::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "fishing") is false:
+      cancel event

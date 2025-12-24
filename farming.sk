@@ -1,0 +1,116 @@
+# =========================================================
+# Custom Farming System
+# Rare drops from crops with farming fortune support
+# =========================================================
+
+options:
+  rare_drop_chance: 0.05
+  rare_drop_multiplier: 2.0
+
+# ----------------------------
+# Rare Drops Configuration
+# ----------------------------
+
+on load:
+  # Wheat rare drops
+  set {farm::rare::wheat::*} to "gold_nugget" and "emerald" and "diamond"
+  set {farm::rare::wheat::chance::*} to 0.03 and 0.02 and 0.01
+  
+  # Carrot rare drops
+  set {farm::rare::carrots::*} to "gold_ingot" and "emerald" and "diamond"
+  set {farm::rare::carrots::chance::*} to 0.03 and 0.02 and 0.01
+  
+  # Potato rare drops
+  set {farm::rare::potatoes::*} to "iron_ingot" and "gold_ingot" and "emerald"
+  set {farm::rare::potatoes::chance::*} to 0.03 and 0.02 and 0.01
+  
+  # Beetroot rare drops
+  set {farm::rare::beetroots::*} to "redstone" and "lapis_lazuli" and "emerald"
+  set {farm::rare::beetroots::chance::*} to 0.03 and 0.02 and 0.01
+  
+  # Melon rare drops
+  set {farm::rare::melon::*} to "gold_block" and "emerald_block" and "diamond_block"
+  set {farm::rare::melon::chance::*} to 0.02 and 0.01 and 0.005
+  
+  # Pumpkin rare drops
+  set {farm::rare::pumpkin::*} to "iron_block" and "gold_block" and "emerald_block"
+  set {farm::rare::pumpkin::chance::*} to 0.02 and 0.01 and 0.005
+
+# ----------------------------
+# Crop Breaking Handler
+# ----------------------------
+
+on break:
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  
+  # Check if it's a crop
+  if {_btStr} is "wheat":
+    farm_handleCrop(player, "wheat", event-block)
+    stop
+  if {_btStr} is "carrots":
+    farm_handleCrop(player, "carrots", event-block)
+    stop
+  if {_btStr} is "potatoes":
+    farm_handleCrop(player, "potatoes", event-block)
+    stop
+  if {_btStr} is "beetroots":
+    farm_handleCrop(player, "beetroots", event-block)
+    stop
+  if {_btStr} is "melon":
+    farm_handleCrop(player, "melon", event-block)
+    stop
+  if {_btStr} is "pumpkin":
+    farm_handleCrop(player, "pumpkin", event-block)
+    stop
+
+function farm_handleCrop(p: player, cropType: text, b: block):
+  set {_loc} to location of {_b}
+  set {_drops::*} to drops of {_b} with {_p}'s tool
+  
+  # Get farming fortune multiplier
+  set {_ff} to ms_farmingFortuneTotal({_p})
+  set {_fortuneMult} to 1 + floor({_ff} / 100)
+  if {_fortuneMult} < 1:
+    set {_fortuneMult} to 1
+  
+  # Handle normal drops with fortune
+  loop {_drops::*}:
+    set {_dropItem} to loop-value-1
+    set {_amount} to amount of {_dropItem}
+    set {_newAmount} to round({_amount} * {_fortuneMult})
+    if {_newAmount} < 1:
+      set {_newAmount} to 1
+    set amount of {_dropItem} to {_newAmount}
+    
+    if {_p}'s inventory can hold {_dropItem}:
+      give {_dropItem} to {_p}
+    else:
+      drop {_dropItem} at {_loc}
+  
+  # Check for rare drops
+  if {farm::rare::%{cropType}%::*} is set:
+    loop {farm::rare::%{cropType}%::*}:
+      set {_rareIndex} to loop-index
+      set {_rareItem} to loop-value-1
+      set {_chance} to {farm::rare::%{cropType}%::chance::%{_rareIndex}%}
+      
+      # Apply farming fortune to rare drop chance
+      set {_adjustedChance} to {_chance} * (1 + ({_ff} / 1000))
+      if {_adjustedChance} > 1:
+        set {_adjustedChance} to 1
+      
+      set {_rand} to random number between 0 and 1
+      if {_rand} <= {_adjustedChance}:
+        set {_rare} to {_rareItem} parsed as itemtype
+        if {_rare} is set:
+          set {_rareItemStack} to {_rare}
+          set amount of {_rareItemStack} to 1
+          if {_p}'s inventory can hold {_rareItemStack}:
+            give {_rareItemStack} to {_p}
+            send "&a&lRare Drop! &f%{_rareItem}% &7from &a%{cropType}%&7!" to {_p}
+          else:
+            drop {_rareItemStack} at {_loc}
+            send "&a&lRare Drop! &f%{_rareItem}% &7from &a%{cropType}%&7!" to {_p}
+          stop loop
+

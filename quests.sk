@@ -1,0 +1,342 @@
+# =========================================================
+# Quest System
+# Quests for fishing, mining, foraging, and farming
+# =========================================================
+
+options:
+  admin_perm: tablevels.admin
+
+# ----------------------------
+# Helpers
+# ----------------------------
+
+function q_cc(t: text) :: text:
+  set {_s} to {_t}
+  replace all "&" with "§" in {_s}
+  return {_s}
+
+function q_uid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+function q_getProgress(p: player, questId: text) :: number:
+  set {_u} to q_uid({_p})
+  set {_prog} to {quest::progress::%{_u}%::%{questId}%}
+  if {_prog} is not set:
+    return 0
+  return {_prog}
+
+function q_setProgress(p: player, questId: text, amount: number):
+  set {_u} to q_uid({_p})
+  set {quest::progress::%{_u}%::%{questId}%} to {_amount}
+  set {_req} to {quest::required::%{questId}%}
+  if {_req} is not set:
+    stop
+  if {_amount} >= {_req}:
+    if {quest::completed::%{_u}%::%{questId}%} is not set:
+      q_completeQuest({_p}, {questId})
+
+function q_completeQuest(p: player, questId: text):
+  set {_u} to q_uid({_p})
+  set {quest::completed::%{_u}%::%{questId}%} to true
+  set {_xp} to {quest::xp::%{questId}%}
+  if {_xp} is set:
+    set {_u2} to q_uid({_p})
+    if {xp::%{_u2}%} is not set:
+      set {xp::%{_u2}%} to 0
+    add {_xp} to {xp::%{_u2}%}
+  send q_cc("&a&lQuest Completed!") to {_p}
+  send q_cc("&7Quest: &f%{quest::name::%{questId}%}%") to {_p}
+  if {_xp} is set:
+    send q_cc("&7Reward: &a+%{_xp}% XP") to {_p}
+
+# ----------------------------
+# Quest Definitions
+# ----------------------------
+
+on load:
+  # Mining Quests
+  set {quest::name::mine_stone_100} to "Mine 100 Stone"
+  set {quest::required::mine_stone_100} to 100
+  set {quest::xp::mine_stone_100} to 50
+  set {quest::type::mine_stone_100} to "mining"
+  set {quest::target::mine_stone_100} to "stone"
+  
+  set {quest::name::mine_ore_50} to "Mine 50 Ores"
+  set {quest::required::mine_ore_50} to 50
+  set {quest::xp::mine_ore_50} to 100
+  set {quest::type::mine_ore_50} to "mining"
+  set {quest::target::mine_ore_50} to "ore"
+  
+  set {quest::name::mine_diamond_10} to "Mine 10 Diamonds"
+  set {quest::required::mine_diamond_10} to 10
+  set {quest::xp::mine_diamond_10} to 500
+  set {quest::type::mine_diamond_10} to "mining"
+  set {quest::target::mine_diamond_10} to "diamond_ore"
+  
+  # Farming Quests
+  set {quest::name::farm_wheat_100} to "Harvest 100 Wheat"
+  set {quest::required::farm_wheat_100} to 100
+  set {quest::xp::farm_wheat_100} to 50
+  set {quest::type::farm_wheat_100} to "farming"
+  set {quest::target::farm_wheat_100} to "wheat"
+  
+  set {quest::name::farm_carrot_100} to "Harvest 100 Carrots"
+  set {quest::required::farm_carrot_100} to 100
+  set {quest::xp::farm_carrot_100} to 50
+  set {quest::type::farm_carrot_100} to "farming"
+  set {quest::target::farm_carrot_100} to "carrot"
+  
+  set {quest::name::farm_potato_100} to "Harvest 100 Potatoes"
+  set {quest::required::farm_potato_100} to 100
+  set {quest::xp::farm_potato_100} to 50
+  set {quest::type::farm_potato_100} to "farming"
+  set {quest::target::farm_potato_100} to "potato"
+  
+  # Foraging Quests
+  set {quest::name::forage_oak_100} to "Chop 100 Oak Logs"
+  set {quest::required::forage_oak_100} to 100
+  set {quest::xp::forage_oak_100} to 50
+  set {quest::type::forage_oak_100} to "foraging"
+  set {quest::target::forage_oak_100} to "oak_log"
+  
+  set {quest::name::forage_birch_100} to "Chop 100 Birch Logs"
+  set {quest::required::forage_birch_100} to 100
+  set {quest::xp::forage_birch_100} to 50
+  set {quest::type::forage_birch_100} to "foraging"
+  set {quest::target::forage_birch_100} to "birch_log"
+  
+  # Fishing Quests
+  set {quest::name::fish_10} to "Catch 10 Fish"
+  set {quest::required::fish_10} to 10
+  set {quest::xp::fish_10} to 100
+  set {quest::type::fish_10} to "fishing"
+  set {quest::target::fish_10} to "fish"
+
+# ----------------------------
+# Quest GUI
+# ----------------------------
+
+function q_openQuestGui(p: player):
+  set {_u} to q_uid({_p})
+  set {_inv} to chest inventory with 6 rows named q_cc("&8Quests")
+  
+  # Fill background
+  set {_i} to 0
+  set {_glass} to black stained glass pane
+  set name of {_glass} to " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+  
+  # Category buttons
+  set slot 10 of {_inv} to iron pickaxe named q_cc("&7Mining Quests") with lore q_cc("&8") and q_cc("&7Click to view")
+  set slot 12 of {_inv} to wheat named q_cc("&aFarming Quests") with lore q_cc("&8") and q_cc("&7Click to view")
+  set slot 14 of {_inv} to oak log named q_cc("&2Foraging Quests") with lore q_cc("&8") and q_cc("&7Click to view")
+  set slot 16 of {_inv} to fishing rod named q_cc("&bFishing Quests") with lore q_cc("&8") and q_cc("&7Click to view")
+  
+  # Close button
+  set slot 49 of {_inv} to barrier named q_cc("&cClose")
+  
+  set {quest::gui::%{_u}%::type} to "main"
+  set {questGuiOpen::%{_u}%} to true
+  open {_inv} to {_p}
+
+function q_openCategoryGui(p: player, category: text):
+  set {_u} to q_uid({_p})
+  set {_inv} to chest inventory with 6 rows named q_cc("&8%{category}% Quests")
+  
+  # Fill background
+  set {_i} to 0
+  set {_glass} to black stained glass pane
+  set name of {_glass} to " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+  
+  # List quests of this category
+  set {_slot} to 0
+  loop {quest::name::*}:
+    set {_id} to loop-value-1
+    set {_type} to {quest::type::%{_id}%}
+    if {_type} is {category}:
+      set {_name} to {quest::name::%{_id}%}
+      set {_req} to {quest::required::%{_id}%}
+      set {_prog} to q_getProgress({_p}, {_id})
+      set {_xp} to {quest::xp::%{_id}%}
+      set {_completed} to {quest::completed::%{_u}%::%{_id}%}
+      
+      if {_completed} is true:
+        set slot {_slot} of {_inv} to lime dye named q_cc("&a%{_name}%") with lore q_cc("&8") and q_cc("&aCompleted!") and q_cc("&7Reward: &a+%{_xp}% XP")
+      else:
+        set {_pct} to round(({_prog} / {_req}) * 100)
+        set slot {_slot} of {_inv} to paper named q_cc("&7%{_name}%") with lore q_cc("&8") and q_cc("&7Progress: &f%{_prog}%&7/&f%{_req}%") and q_cc("&7Percentage: &f%{_pct}%%%") and q_cc("&7Reward: &a+%{_xp}% XP")
+      add 1 to {_slot}
+      if {_slot} >= 45:
+        stop
+  
+  # Back button
+  set slot 45 of {_inv} to arrow named q_cc("&7Back")
+  set slot 49 of {_inv} to barrier named q_cc("&cClose")
+  
+  set {quest::gui::%{_u}%::type} to {category}
+  set {questGuiOpen::%{_u}%} to true
+  open {_inv} to {_p}
+
+# ----------------------------
+# Commands
+# ----------------------------
+
+command /quest:
+  executable by: players
+  trigger:
+    q_openQuestGui(player)
+
+command /quests:
+  executable by: players
+  trigger:
+    q_openQuestGui(player)
+
+# ----------------------------
+# GUI Click Handling
+# ----------------------------
+
+on inventory click:
+  set {_u} to q_uid(player)
+  
+  if {questGuiOpen::%{_u}%} is true:
+    # Check if clicking in player's own inventory (not GUI)
+    # When GUI is open, player inventory is still accessible below the GUI
+    if clicked inventory is player's inventory:
+      stop
+    
+    # This is a GUI click - cancel and handle it
+    cancel event
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+    
+    if {_slotNum} is 10:
+      wait 1 tick
+      q_openCategoryGui(player, "mining")
+      stop
+    if {_slotNum} is 12:
+      wait 1 tick
+      q_openCategoryGui(player, "farming")
+      stop
+    if {_slotNum} is 14:
+      wait 1 tick
+      q_openCategoryGui(player, "foraging")
+      stop
+    if {_slotNum} is 16:
+      wait 1 tick
+      q_openCategoryGui(player, "fishing")
+      stop
+    if {_slotNum} is 45:
+      wait 1 tick
+      q_openQuestGui(player)
+      stop
+    if {_slotNum} is 49:
+      close player's inventory
+      delete {questGuiOpen::%{_u}%}
+      stop
+    stop
+
+on inventory close:
+  set {_u} to q_uid(player)
+  delete {questGuiOpen::%{_u}%}
+
+# ----------------------------
+# Quest Progress Tracking
+# ----------------------------
+
+on break:
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  set {_u} to q_uid(player)
+  
+  # Check all mining quests
+  loop {quest::type::*}:
+    set {_id} to loop-value-1
+    if {quest::type::%{_id}%} is "mining":
+      set {_target} to {quest::target::%{_id}%}
+      if {_btStr} contains {_target}:
+        set {_prog} to q_getProgress(player, {_id})
+        add 1 to {_prog}
+        q_setProgress(player, {_id}, {_prog})
+        stop loop
+
+on break:
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  set {_u} to q_uid(player)
+  
+  # Check all farming quests
+  if {_btStr} is "wheat":
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "farming":
+        set {_target} to {quest::target::%{_id}%}
+        if {_btStr} contains {_target}:
+          set {_prog} to q_getProgress(player, {_id})
+          add 1 to {_prog}
+          q_setProgress(player, {_id}, {_prog})
+          stop loop
+  if {_btStr} is "carrots":
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "farming":
+        set {_target} to {quest::target::%{_id}%}
+        if {_btStr} contains {_target}:
+          set {_prog} to q_getProgress(player, {_id})
+          add 1 to {_prog}
+          q_setProgress(player, {_id}, {_prog})
+          stop loop
+  if {_btStr} is "potatoes":
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "farming":
+        set {_target} to {quest::target::%{_id}%}
+        if {_btStr} contains {_target}:
+          set {_prog} to q_getProgress(player, {_id})
+          add 1 to {_prog}
+          q_setProgress(player, {_id}, {_prog})
+          stop loop
+  if {_btStr} is "beetroots":
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "farming":
+        set {_target} to {quest::target::%{_id}%}
+        if {_btStr} contains {_target}:
+          set {_prog} to q_getProgress(player, {_id})
+          add 1 to {_prog}
+          q_setProgress(player, {_id}, {_prog})
+          stop loop
+
+on break:
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  set {_u} to q_uid(player)
+  
+  # Check all foraging quests
+  if {_btStr} contains "log":
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "foraging":
+        set {_target} to {quest::target::%{_id}%}
+        if {_btStr} contains {_target}:
+          set {_prog} to q_getProgress(player, {_id})
+          add 1 to {_prog}
+          q_setProgress(player, {_id}, {_prog})
+          stop loop
+
+on fishing state change:
+  if fishing state is caught fish:
+    set {_u} to q_uid(player)
+    loop {quest::type::*}:
+      set {_id} to loop-value-1
+      if {quest::type::%{_id}%} is "fishing":
+        set {_prog} to q_getProgress(player, {_id})
+        add 1 to {_prog}
+        q_setProgress(player, {_id}, {_prog})
+        stop loop
+
