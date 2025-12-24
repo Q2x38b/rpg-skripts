@@ -164,7 +164,7 @@ function wgm_openBlockGui(p: player, wName: text, blockKey: text):
   
   set {wgm::gui::%wgm_uid({_p})%} to "block"
   set {wgm::world::%wgm_uid({_p})%} to {_wName}
-  set {wgm::block::%wgm_uid({_p})%} to {blockKey}
+  set {wgm::block::%wgm_uid({_p})%} to {_blockKey}
   set {wgmGuiOpen::%wgm_uid({_p})%} to true
   open {_inv} to {_p}
 
@@ -365,10 +365,6 @@ on inventory click:
         wgm_openWorldGui(player, {_wName})
         stop
       stop
-
-on inventory close:
-  set {_u} to wgm_uid(player)
-  delete {wgmGuiOpen::%{_u}%}
 
 on inventory drag:
   set {_u} to wgm_uid(player)

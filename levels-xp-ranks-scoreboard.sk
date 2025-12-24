@@ -357,6 +357,43 @@ on chat:
 # XP gain (mining)
 # -------------------------
 
+function lr_addMiningXp(p: player, amt: number):
+  if {_p} is not set:
+    stop
+  if {_amt} is not set:
+    stop
+  if {_amt} <= 0:
+    stop
+
+  set {_u} to lr_uid({_p})
+  if {xp::%{_u}%} is not set:
+    set {xp::%{_u}%} to 0
+  add {_amt} to {xp::%{_u}%}
+
+  # Action bar (no date comparisons)
+  add 1 to {xpab::%{_u}%::token}
+  set {_tok} to {xpab::%{_u}%::token}
+  set {_lvl} to lr_level({_p})
+  set {_need} to lr_need({_lvl})
+  set {_left} to {_need} - {xp::%{_u}%}
+  if {_left} < 0:
+    set {_left} to 0
+  send action bar "&a+%{_amt}% XP &8(&7%{_left}% to next&8)" to {_p}
+  wait {@xp_actionbar_seconds} seconds
+  if {xpab::%{_u}%::token} is {_tok}:
+    send action bar " " to {_p}
+
+  # Level-ups
+  loop 100 times:
+    set {_lvl2} to lr_level({_p})
+    set {_need2} to lr_need({_lvl2})
+    if {xp::%{_u}%} < {_need2}:
+      stop loop
+    remove {_need2} from {xp::%{_u}%}
+    add 1 to {level::%{_u}%}
+    lr_refreshPlayerFull({_p})
+    message "&aLevel up! &7You are now level &f%{level::%{_u}%}%&7." to {_p}
+
 on break of stone or deepslate or netherrack or end stone:
   set {_w} to name of world of player
   set {_btType} to type of event-block
@@ -390,34 +427,7 @@ on break of stone or deepslate or netherrack or end stone:
   if {_allowed} is false:
     stop
 
-  set {_u} to lr_uid(player)
-  if {xp::%{_u}%} is not set:
-    set {xp::%{_u}%} to 0
-  add {@mining_xp} to {xp::%{_u}%}
-
-  # Action bar (no date comparisons)
-  add 1 to {xpab::%{_u}%::token}
-  set {_tok} to {xpab::%{_u}%::token}
-  set {_lvl} to lr_level(player)
-  set {_need} to lr_need({_lvl})
-  set {_left} to {_need} - {xp::%{_u}%}
-  if {_left} < 0:
-    set {_left} to 0
-  send action bar "&a+{@mining_xp} XP &8(&7%{_left}% to next&8)" to player
-  wait {@xp_actionbar_seconds} seconds
-  if {xpab::%{_u}%::token} is {_tok}:
-    send action bar " " to player
-
-  # Level-ups
-  loop 100 times:
-    set {_lvl2} to lr_level(player)
-    set {_need2} to lr_need({_lvl2})
-    if {xp::%{_u}%} < {_need2}:
-      stop loop
-    remove {_need2} from {xp::%{_u}%}
-    add 1 to {level::%{_u}%}
-    lr_refreshPlayerFull(player)
-    message "&aLevel up! &7You are now level &f%{level::%{_u}%}%&7." to player
+  lr_addMiningXp(player, {@mining_xp})
 
 # -------------------------
 # /level GUI + admin controls
