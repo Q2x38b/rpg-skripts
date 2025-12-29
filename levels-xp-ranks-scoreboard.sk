@@ -219,24 +219,133 @@ on script load:
     set {ranks::owner::priority} to 100
     set {ranks::owner::color} to "&c"
 
-  # below-name objective (vanilla)
-  set {_obj} to "lr_level"
-  set {_disp} to "&aLvl"
-  execute console command "scoreboard objectives remove %{_obj}%"
+  # Setup sidebar scoreboard
   wait 2 ticks
-  execute console command "scoreboard objectives add %{_obj}% dummy ""%{_disp}%"""
-  wait 2 ticks
-  # Set the display slot to show below player names
-  execute console command "scoreboard objectives setdisplay belowName %{_obj}%"
-  wait 1 tick
+  lr_setupScoreboard()
 
   # Apply immediately after reload
   loop all players:
     lr_refreshPlayerFull(loop-player)
+    lr_updateSidebar(loop-player)
+
+# -------------------------
+# Sidebar Scoreboard System
+# -------------------------
+
+function lr_setupScoreboard():
+  # Remove old objectives if they exist
+  execute console command "scoreboard objectives remove lr_level"
+  execute console command "scoreboard objectives remove lr_sidebar"
+  wait 2 ticks
+
+  # Create below-name objective for level display
+  execute console command "scoreboard objectives add lr_level dummy ""&aLvl"""
+  wait 1 tick
+  execute console command "scoreboard objectives setdisplay belowName lr_level"
+
+function lr_updateSidebar(p: player):
+  set {_u} to lr_uid({_p})
+  set {_lvl} to lr_level({_p})
+  set {_xp} to lr_xp({_p})
+  set {_need} to lr_need({_lvl})
+  set {_left} to {_need} - {_xp}
+  if {_left} < 0:
+    set {_left} to 0
+
+  # Calculate progress percentage
+  set {_pct} to 0
+  if {_need} > 0:
+    set {_pct} to round(({_xp} / {_need}) * 100)
+
+  # Build progress bar (10 segments)
+  set {_filled} to floor({_pct} / 10)
+  if {_filled} > 10:
+    set {_filled} to 10
+  if {_filled} < 0:
+    set {_filled} to 0
+
+  set {_bar} to ""
+  set {_i} to 0
+  while {_i} < 10:
+    if {_i} < {_filled}:
+      set {_bar} to "%{_bar}%&a▌"
+    else:
+      set {_bar} to "%{_bar}%&8▌"
+    add 1 to {_i}
+
+  # Get rank info
+  set {_prefix} to lr_rankPrefix({_p})
+  set {_lvlCol} to lr_levelColor({_lvl})
+
+  # Get stats from health system
+  set {_hp} to {ha::hp::%{_u}%}
+  if {_hp} is not set:
+    set {_hp} to 50
+  set {_maxHp} to 50
+  set {_equipHp} to {equip::hp::%{_u}%}
+  if {_equipHp} is set:
+    add {_equipHp} to {_maxHp}
+
+  set {_mana} to {ha::mana::%{_u}%}
+  if {_mana} is not set:
+    set {_mana} to 100
+  set {_maxMana} to 100
+  set {_equipMana} to {equip::mana::%{_u}%}
+  if {_equipMana} is set:
+    add {_equipMana} to {_maxMana}
+
+  # Get mining stats from equipment
+  set {_mSpeed} to {equip::speed::%{_u}%}
+  if {_mSpeed} is not set:
+    set {_mSpeed} to 0
+  set {_mFortune} to {equip::fortune::%{_u}%}
+  if {_mFortune} is not set:
+    set {_mFortune} to 0
+
+  # Build sidebar lines (sent bottom to top, scores 1-15)
+  # Using a custom scoreboard display
+  set {_title} to "&a&lVᴇɴᴛᴜʀᴇ &7Rᴘɢ"
+
+  # Clear old sidebar and create new one
+  set {_lines::1} to " "
+  set {_lines::2} to "&7Rank: %{_prefix}%"
+  set {_lines::3} to "&7Level: %{_lvlCol}%%{_lvl}%"
+  set {_lines::4} to "  "
+  set {_lines::5} to "&7Progress: &f%{_pct}%%%"
+  set {_lines::6} to "&8[%{_bar}%&8]"
+  set {_lines::7} to "&7XP: &a%{_xp}%&7/&a%{_need}%"
+  set {_lines::8} to "   "
+  set {_lines::9} to "&c❤ &f%round({_hp})%&7/%{_maxHp}%"
+  set {_lines::10} to "&9✎ &f%round({_mana})%&7/%{_maxMana}%"
+  set {_lines::11} to "    "
+  set {_lines::12} to "&a⸕ &f%{_mSpeed}% &7Speed"
+  set {_lines::13} to "&b☘ &f%{_mFortune}% &7Fortune"
+  set {_lines::14} to "     "
+  set {_lines::15} to "&7World: &f%name of world of {_p}%"
+
+  # Send scoreboard using Skript's built-in system
+  # We'll use the sidebar title and lines
+  set title of sidebar of {_p} to {_title}
+  set line 15 of sidebar of {_p} to {_lines::1}
+  set line 14 of sidebar of {_p} to {_lines::2}
+  set line 13 of sidebar of {_p} to {_lines::3}
+  set line 12 of sidebar of {_p} to {_lines::4}
+  set line 11 of sidebar of {_p} to {_lines::5}
+  set line 10 of sidebar of {_p} to {_lines::6}
+  set line 9 of sidebar of {_p} to {_lines::7}
+  set line 8 of sidebar of {_p} to {_lines::8}
+  set line 7 of sidebar of {_p} to {_lines::9}
+  set line 6 of sidebar of {_p} to {_lines::10}
+  set line 5 of sidebar of {_p} to {_lines::11}
+  set line 4 of sidebar of {_p} to {_lines::12}
+  set line 3 of sidebar of {_p} to {_lines::13}
+  set line 2 of sidebar of {_p} to {_lines::14}
+  set line 1 of sidebar of {_p} to {_lines::15}
 
 on join:
   wait 2 ticks
   lr_refreshPlayerFull(player)
+  lr_updateSidebar(player)
 
 # OPTIONAL: keep TAB footer stats fresh without scoreboard spam
 every 30 seconds:
@@ -247,6 +356,11 @@ every 30 seconds:
 every 1 minute:
   loop all players:
     lr_updateBelowName(loop-player)
+
+# Keep sidebar updated with live stats
+every 2 seconds:
+  loop all players:
+    lr_updateSidebar(loop-player)
 
 # -------------------------
 # Chat formatting + rank editor input (single handler)

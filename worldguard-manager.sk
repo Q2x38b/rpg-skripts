@@ -185,202 +185,211 @@ command /wgmanager:
 
 on inventory click:
   set {_u} to wgm_uid(player)
-  
-  if {wgmGuiOpen::%{_u}%} is true:
-    # Check if clicking in player's own inventory (not GUI)
-    if clicked inventory is player's inventory:
+  set {_invName} to name of event-inventory
+
+  # Check if it's a WGM GUI by inventory name
+  if {_invName} is not set:
+    stop
+
+  set {_checkName} to {_invName}
+  replace all "§" with "" in {_checkName}
+  replace all "&" with "" in {_checkName}
+
+  # Determine GUI type from inventory name
+  set {_isWgmGui} to false
+  set {_guiType} to ""
+
+  if {_checkName} contains "WorldGuard Manager":
+    set {_isWgmGui} to true
+    set {_guiType} to "worlds"
+  else if {_checkName} starts with "8World: ":
+    set {_isWgmGui} to true
+    set {_guiType} to "world"
+  else if {_checkName} starts with "8Edit Block: ":
+    set {_isWgmGui} to true
+    set {_guiType} to "block"
+
+  if {_isWgmGui} is false:
+    stop
+
+  # Check if clicking in player's own inventory (not GUI)
+  if clicked inventory is player's inventory:
+    stop
+
+  # This is a GUI click - cancel and handle it
+  cancel event
+
+  set {_slotNum} to clicked slot
+  if {_slotNum} is not set:
+    stop
+
+  # Handle WORLDS gui
+  if {_guiType} is "worlds":
+    if {_slotNum} is 49:
+      close player's inventory
+      delete {wgmGuiOpen::%{_u}%}
       stop
-    
-    # Check inventory name to ensure it's a wgmanager GUI (check without color codes)
-    set {_invName} to name of event-inventory
-    if {_invName} is not set:
+    set {_wName} to {wgm::worlds::%{_u}%::slot::%{_slotNum}%}
+    if {_wName} is set:
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
+    stop
+
+  # Handle WORLD gui
+  if {_guiType} is "world":
+    set {_wName} to {wgm::world::%{_u}%}
+    if {_wName} is not set:
       stop
-    set {_checkName} to {_invName}
-    replace all "§" with "" in {_checkName}
-    replace all "&" with "" in {_checkName}
-    # Check if this is a WGM GUI
-    set {_isWgmGui} to false
-    if {_checkName} contains "WorldGuard":
-      set {_isWgmGui} to true
-    if {_checkName} contains "World: ":
-      set {_isWgmGui} to true
-    if {_checkName} contains "Edit Block: ":
-      set {_isWgmGui} to true
-    if {_isWgmGui} is false:
+
+    if {_slotNum} is 10:
+      # Open world permissions GUI - use player command instead of console
+      close player's inventory
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
       stop
-    
-    # This is a GUI click - cancel and handle it
-    cancel event
-    set {_slotNum} to clicked slot
-    if {_slotNum} is not set:
-      stop
-    
-    set {_guiType} to {wgm::gui::%{_u}%}
-    
-    if {_guiType} is "worlds":
-      if {_slotNum} is 49:
-        close player's inventory
-        delete {wgmGuiOpen::%{_u}%}
-        stop
-      set {_wName} to {wgm::worlds::%{_u}%::slot::%{_slotNum}%}
-      if {_wName} is not set:
-        stop
+
+    if {_slotNum} is 12:
+      # Block whitelist - already in this GUI
       wait 1 tick
       wgm_openWorldGui(player, {_wName})
       stop
-    
-    if {_guiType} is "world":
-      set {_wName} to {wgm::world::%{_u}%}
-      if {_wName} is not set:
-        stop
-      
-      if {_slotNum} is 10:
-        # Open world permissions GUI
-        wait 1 tick
-        execute console command "wgperms %{_wName}%"
-        stop
-      
-      if {_slotNum} is 12:
-        # Block whitelist - already in this GUI
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      if {_slotNum} is 14:
-        # Toggle regen
-        if {wgregen::enabled::%{_wName}%} is true:
-          set {wgregen::enabled::%{_wName}%} to false
-        else:
-          set {wgregen::enabled::%{_wName}%} to true
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      if {_slotNum} is 15:
-        # Toggle autopickup
-        if {wgregen::autopickup::%{_wName}%} is true:
-          set {wgregen::autopickup::%{_wName}%} to false
-        else:
-          set {wgregen::autopickup::%{_wName}%} to true
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      if {_slotNum} is 16:
-        # Toggle placeholder
-        set {_ph} to {wgregen::placeholder::%{_wName}%}
-        if {_ph} is not set:
-          set {_ph} to "bedrock"
-        if {_ph} is "air":
-          set {wgregen::placeholder::%{_wName}%} to "bedrock"
-        else:
-          set {wgregen::placeholder::%{_wName}%} to "air"
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      if {_slotNum} is 28:
-        # Add block from hand
-        if player's tool is air:
-          send wgm_cc("&cHold a block item in your hand.") to player
-          stop
-        set {_bt} to type of player's tool
-        add {_bt} to {wgblock::allowtype::%{_wName}%::*}
-        send wgm_cc("&aAdded &f%{_bt}% &ato whitelist.") to player
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      # Check if clicked a block slot
-      set {_blockKey} to {wgm::blocks::%{_u}%::slot::%{_slotNum}%}
-      if {_blockKey} is set:
-        wait 1 tick
-        wgm_openBlockGui(player, {_wName}, {_blockKey})
-        stop
-      
-      if {_slotNum} is 45:
-        wait 1 tick
-        wgm_openWorldsGui(player)
-        stop
-      
-      if {_slotNum} is 49:
-        close player's inventory
-        delete {wgmGuiOpen::%{_u}%}
-        stop
+
+    if {_slotNum} is 14:
+      # Toggle regen
+      if {wgregen::enabled::%{_wName}%} is true:
+        set {wgregen::enabled::%{_wName}%} to false
+      else:
+        set {wgregen::enabled::%{_wName}%} to true
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
       stop
-    
-    if {_guiType} is "block":
-      set {_wName} to {wgm::world::%{_u}%}
-      set {_blockKey} to {wgm::block::%{_u}%}
-      if {_wName} is not set:
-        stop
-      if {_blockKey} is not set:
-        stop
-      
-      if {_slotNum} is 11:
-        # Edit regen seconds
-        set {wgm::chat::%{_u}%::type} to "seconds"
-        set {wgm::chat::%{_u}%::world} to {_wName}
-        set {wgm::chat::%{_u}%::block} to {_blockKey}
-        close player's inventory
-        send wgm_cc("&eType regen seconds (number) in chat. Type &ccancel &eto cancel.") to player
-        stop
-      
-      if {_slotNum} is 13:
-        # Edit XP amount
-        set {wgm::chat::%{_u}%::type} to "xp"
-        set {wgm::chat::%{_u}%::world} to {_wName}
-        set {wgm::chat::%{_u}%::block} to {_blockKey}
-        close player's inventory
-        send wgm_cc("&eType XP amount (number) in chat. Type &ccancel &eto cancel.") to player
-        stop
-      
-      if {_slotNum} is 15:
-        # Edit hardness
-        set {wgm::chat::%{_u}%::type} to "hardness"
-        set {wgm::chat::%{_u}%::world} to {_wName}
-        set {wgm::chat::%{_u}%::block} to {_blockKey}
-        close player's inventory
-        send wgm_cc("&eType hardness in chat.") to player
-        send wgm_cc("&7Format: &fabs:5.0 &7or &fmult:1.5") to player
-        send wgm_cc("&7Type &ccancel &7to cancel.") to player
-        stop
-      
-      if {_slotNum} is 17:
-        # Toggle placeholder
-        set {_ph} to {wgblock::placeholder::%{_wName}%::%{_blockKey}%}
-        if {_ph} is not set:
-          set {_wph} to {wgregen::placeholder::%{_wName}%}
-          if {_wph} is not set:
-            set {_wph} to "bedrock"
-          set {_ph} to {_wph}
-        if {_ph} is "air":
-          set {wgblock::placeholder::%{_wName}%::%{_blockKey}%} to "bedrock"
-        else:
-          set {wgblock::placeholder::%{_wName}%::%{_blockKey}%} to "air"
-        wait 1 tick
-        wgm_openBlockGui(player, {_wName}, {_blockKey})
-        stop
-      
-      if {_slotNum} is 22:
-        # Remove from whitelist
-        set {_bt} to {_blockKey} parsed as itemtype
-        if {_bt} is set:
-          remove {_bt} from {wgblock::allowtype::%{_wName}%::*}
-          delete {wgblock::seconds::%{_wName}%::%{_blockKey}%}
-          delete {wgblock::xp::%{_wName}%::%{_blockKey}%}
-          delete {wgblock::placeholder::%{_wName}%::%{_blockKey}%}
-          delete {mshard::%{_wName}%::%{_blockKey}%}
-          send wgm_cc("&cRemoved &f%{_blockKey}% &cfrom whitelist.") to player
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
-      
-      if {_slotNum} is 26:
-        wait 1 tick
-        wgm_openWorldGui(player, {_wName})
-        stop
+
+    if {_slotNum} is 15:
+      # Toggle autopickup
+      if {wgregen::autopickup::%{_wName}%} is true:
+        set {wgregen::autopickup::%{_wName}%} to false
+      else:
+        set {wgregen::autopickup::%{_wName}%} to true
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
       stop
+
+    if {_slotNum} is 16:
+      # Toggle placeholder
+      set {_ph} to {wgregen::placeholder::%{_wName}%}
+      if {_ph} is not set:
+        set {_ph} to "bedrock"
+      if {_ph} is "air":
+        set {wgregen::placeholder::%{_wName}%} to "bedrock"
+      else:
+        set {wgregen::placeholder::%{_wName}%} to "air"
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
+      stop
+
+    if {_slotNum} is 28:
+      # Add block from hand
+      if player's tool is air:
+        send wgm_cc("&cHold a block item in your hand.") to player
+        stop
+      set {_bt} to type of player's tool
+      add {_bt} to {wgblock::allowtype::%{_wName}%::*}
+      send wgm_cc("&aAdded &f%{_bt}% &ato whitelist.") to player
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
+      stop
+
+    if {_slotNum} is 45:
+      wait 1 tick
+      wgm_openWorldsGui(player)
+      stop
+
+    if {_slotNum} is 49:
+      close player's inventory
+      delete {wgmGuiOpen::%{_u}%}
+      stop
+
+    # Check if clicked a block slot (slots 30-47 for listed blocks)
+    set {_blockKey} to {wgm::blocks::%{_u}%::slot::%{_slotNum}%}
+    if {_blockKey} is set:
+      wait 1 tick
+      wgm_openBlockGui(player, {_wName}, {_blockKey})
+      stop
+    stop
+
+  # Handle BLOCK gui
+  if {_guiType} is "block":
+    set {_wName} to {wgm::world::%{_u}%}
+    set {_blockKey} to {wgm::block::%{_u}%}
+    if {_wName} is not set:
+      stop
+    if {_blockKey} is not set:
+      stop
+
+    if {_slotNum} is 11:
+      # Edit regen seconds
+      set {wgm::chat::%{_u}%::type} to "seconds"
+      set {wgm::chat::%{_u}%::world} to {_wName}
+      set {wgm::chat::%{_u}%::block} to {_blockKey}
+      close player's inventory
+      send wgm_cc("&eType regen seconds (number) in chat. Type &ccancel &eto cancel.") to player
+      stop
+
+    if {_slotNum} is 13:
+      # Edit XP amount
+      set {wgm::chat::%{_u}%::type} to "xp"
+      set {wgm::chat::%{_u}%::world} to {_wName}
+      set {wgm::chat::%{_u}%::block} to {_blockKey}
+      close player's inventory
+      send wgm_cc("&eType XP amount (number) in chat. Type &ccancel &eto cancel.") to player
+      stop
+
+    if {_slotNum} is 15:
+      # Edit hardness
+      set {wgm::chat::%{_u}%::type} to "hardness"
+      set {wgm::chat::%{_u}%::world} to {_wName}
+      set {wgm::chat::%{_u}%::block} to {_blockKey}
+      close player's inventory
+      send wgm_cc("&eType hardness in chat.") to player
+      send wgm_cc("&7Format: &fabs:5.0 &7or &fmult:1.5") to player
+      send wgm_cc("&7Type &ccancel &7to cancel.") to player
+      stop
+
+    if {_slotNum} is 17:
+      # Toggle placeholder
+      set {_ph} to {wgblock::placeholder::%{_wName}%::%{_blockKey}%}
+      if {_ph} is not set:
+        set {_wph} to {wgregen::placeholder::%{_wName}%}
+        if {_wph} is not set:
+          set {_wph} to "bedrock"
+        set {_ph} to {_wph}
+      if {_ph} is "air":
+        set {wgblock::placeholder::%{_wName}%::%{_blockKey}%} to "bedrock"
+      else:
+        set {wgblock::placeholder::%{_wName}%::%{_blockKey}%} to "air"
+      wait 1 tick
+      wgm_openBlockGui(player, {_wName}, {_blockKey})
+      stop
+
+    if {_slotNum} is 22:
+      # Remove from whitelist
+      set {_bt} to {_blockKey} parsed as itemtype
+      if {_bt} is set:
+        remove {_bt} from {wgblock::allowtype::%{_wName}%::*}
+        delete {wgblock::seconds::%{_wName}%::%{_blockKey}%}
+        delete {wgblock::xp::%{_wName}%::%{_blockKey}%}
+        delete {wgblock::placeholder::%{_wName}%::%{_blockKey}%}
+        delete {mshard::%{_wName}%::%{_blockKey}%}
+        send wgm_cc("&cRemoved &f%{_blockKey}% &cfrom whitelist.") to player
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
+      stop
+
+    if {_slotNum} is 26:
+      wait 1 tick
+      wgm_openWorldGui(player, {_wName})
+      stop
+    stop
 
 on inventory drag:
   set {_u} to wgm_uid(player)

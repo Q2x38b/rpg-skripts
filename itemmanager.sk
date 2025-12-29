@@ -1,363 +1,1185 @@
 # =========================================================
-# Accessories + GiveItem (separate from tab_levels_ranks)
-# Standalone: does not call external functions (cc/uid/getXP/addXP). Integrates via shared variables + /levelxpadd.
+# Item Manager - Hypixel Skyblock Style Items
+# Comprehensive item creation and management system
 # =========================================================
 
 options:
   admin_perm: tablevels.admin
 
-# --------------------------
+# ===== RARITY DEFINITIONS =====
+# Each rarity has: color, name
+
+# ----------------------------
 # Helpers
-# --------------------------
+# ----------------------------
 
-function isAccSlot(n: number) :: boolean:
-  if {_n} is between 10 and 16:
-    return true
-  if {_n} is between 19 and 25:
-    return true
-  return false
+function im_cc(t: text) :: text:
+  set {_s} to {_t}
+  replace all "&" with "§" in {_s}
+  return {_s}
 
-function isAccessoryItem(i: item) :: boolean:
-  if {_i} is not set:
-    return false
-  if {_i} is air:
-    return false
-  if lore of {_i} is not set:
-    return false
-  loop lore of {_i}:
-    if loop-value contains "Accessory":
-      return true
-  return false
+function im_uid(p: player) :: text:
+  return "%uuid of {_p}%"
 
-function hpBonusFromItem(i: item) :: number:
-  set {_b} to 0
-  if {_i} is not set:
-    return 0
-  if lore of {_i} is not set:
-    return 0
-  loop lore of {_i}:
-    set {_l} to loop-value
-    if {_l} contains "HP Bonus:":
-      set {_t} to {_l}
-      replace all "HP Bonus:" with "" in {_t}
-      replace all "+" with "" in {_t}
-      replace all " " with "" in {_t}
-      set {_b} to {_t} parsed as number
-      return {_b}
-  return 0
+# ----------------------------
+# Rarity Functions
+# ----------------------------
 
-function manaBonusFromItem(i: item) :: number:
-  set {_b} to 0
-  if {_i} is not set:
-    return 0
-  if lore of {_i} is not set:
-    return 0
-  loop lore of {_i}:
-    set {_l} to loop-value
-    if {_l} contains "Mana Bonus:":
-      set {_t} to {_l}
-      replace all "Mana Bonus:" with "" in {_t}
-      replace all "+" with "" in {_t}
-      replace all " " with "" in {_t}
-      set {_b} to {_t} parsed as number
-      return {_b}
-  return 0
+function im_rarityColor(rarity: text) :: text:
+  if {_rarity} is "COMMON":
+    return "&f"
+  if {_rarity} is "UNCOMMON":
+    return "&a"
+  if {_rarity} is "RARE":
+    return "&9"
+  if {_rarity} is "EPIC":
+    return "&5"
+  if {_rarity} is "LEGENDARY":
+    return "&6"
+  if {_rarity} is "MYTHIC":
+    return "&d"
+  if {_rarity} is "DIVINE":
+    return "&b"
+  if {_rarity} is "SPECIAL":
+    return "&c"
+  if {_rarity} is "VERY_SPECIAL":
+    return "&c"
+  return "&f"
 
-function recalcAccessoryBonuses(p: player):
-  set {_u} to "%uuid of {_p}%"
-  set {_hp} to 0
-  set {_mana} to 0
-  loop {accbag::%{_u}%::slot::*}:
-    set {_it} to loop-value
-    if {_it} is set:
-      if isAccessoryItem({_it}) is true:
-        add hpBonusFromItem({_it}) to {_hp}
-        add manaBonusFromItem({_it}) to {_mana}
-  set {accbonus::hp::%{_u}%} to {_hp}
-  set {accbonus::mana::%{_u}%} to {_mana}
+function im_rarityName(rarity: text) :: text:
+  if {_rarity} is "COMMON":
+    return "COMMON"
+  if {_rarity} is "UNCOMMON":
+    return "UNCOMMON"
+  if {_rarity} is "RARE":
+    return "RARE"
+  if {_rarity} is "EPIC":
+    return "EPIC"
+  if {_rarity} is "LEGENDARY":
+    return "LEGENDARY"
+  if {_rarity} is "MYTHIC":
+    return "MYTHIC"
+  if {_rarity} is "DIVINE":
+    return "DIVINE"
+  if {_rarity} is "SPECIAL":
+    return "SPECIAL"
+  if {_rarity} is "VERY_SPECIAL":
+    return "VERY SPECIAL"
+  return "COMMON"
 
+# ----------------------------
+# Lore Building Functions
+# ----------------------------
 
-# --------------------------
-# XP Rune (tool-applied multiplier)
-# --------------------------
-function isXPRuneItem(i: item) :: boolean:
-  if {_i} is not set:
-    return false
-  if type of {_i} is not amethyst shard:
-    return false
-  if name of {_i} is set:
-    if uncolored name of {_i} is "XP Rune":
-      return true
-  return false
+function im_buildLore(stats: texts, abilities: texts, description: texts, rarity: text, itemType: text) :: texts:
+  set {_lore::*} to ""
+  clear {_lore::*}
 
-function hasXPRuneOnTool(i: item) :: boolean:
-  if {_i} is not set:
-    return false
-  # Prefer lore marker (most reliable)
-  if lore of {_i} is set:
-    loop lore of {_i}:
-      if uncolored loop-value contains "XP Rune":
-        return true
-  # Fallback: name prefix [⋆]
-  if name of {_i} is set:
-    set {_n} to uncolored name of {_i}
-    if {_n} starts with "[⋆]":
-      return true
-    if {_n} starts with "[★]":
-      return true
-  return false
+  # Stats section
+  if size of {_stats::*} > 0:
+    loop {_stats::*}:
+      if loop-value is not "":
+        add loop-value to {_lore::*}
+    add "" to {_lore::*}
 
-function isEligibleRuneTarget(i: item) :: boolean:
-  if {_i} is not set:
-    return false
-  if {_i} is air:
-    return false
-  # Allow most tools + common combat/fishing items. Uses type-name checks for broad compatibility.
-  if {_i} is tool:
-    return true
-  set {_t} to "%type of {_i}%"
-  if {_t} contains "sword":
-    return true
-  if {_t} contains "bow":
-    return true
-  if {_t} contains "crossbow":
-    return true
-  if {_t} contains "trident":
-    return true
-  if {_t} contains "fishing rod":
-    return true
-  return false
-function applyXPRuneToTool(p: player, target: item) :: boolean:
-  if hasXPRuneOnTool({_target}) is true:
-    return false
-  if name of {_target} is set:
-    set {_base} to name of {_target}
+  # Abilities section
+  if size of {_abilities::*} > 0:
+    loop {_abilities::*}:
+      if loop-value is not "":
+        add loop-value to {_lore::*}
+    add "" to {_lore::*}
+
+  # Description/flavor text
+  if size of {_description::*} > 0:
+    loop {_description::*}:
+      if loop-value is not "":
+        add im_cc("&7%loop-value%") to {_lore::*}
+    add "" to {_lore::*}
+
+  # Rarity line (final line)
+  set {_col} to im_rarityColor({_rarity})
+  set {_rarName} to im_rarityName({_rarity})
+  add im_cc("%{_col}%&l%{_rarName}% %{_itemType}%") to {_lore::*}
+
+  return {_lore::*}
+
+# ----------------------------
+# Stat Line Builders
+# ----------------------------
+
+function im_statLine(statName: text, value: number, color: text) :: text:
+  if {_value} >= 0:
+    return im_cc("%{_color}%%{_statName}%: &f+%{_value}%")
   else:
-    set {_base} to "%type of {_target}%"
-  set name of {_target} to "&8[&a⋆&8] %{_base}%"
-  # Add/append lore marker
-  if lore of {_target} is set:
-    add "&8XP Rune: &a1.75x" to lore of {_target}
-  else:
-    set lore of {_target} to "&8XP Rune: &a1.75x"
-  return true
+    return im_cc("%{_color}%%{_statName}%: &c%{_value}%")
 
-# --------------------------
+function im_healthStat(value: number) :: text:
+  return im_statLine("❤ Health", {_value}, "&c")
+
+function im_defenseStat(value: number) :: text:
+  return im_statLine("❈ Defense", {_value}, "&a")
+
+function im_strengthStat(value: number) :: text:
+  return im_statLine("❁ Strength", {_value}, "&c")
+
+function im_speedStat(value: number) :: text:
+  return im_statLine("✦ Speed", {_value}, "&f")
+
+function im_critChanceStat(value: number) :: text:
+  return im_statLine("☣ Crit Chance", {_value}, "&9")
+
+function im_critDamageStat(value: number) :: text:
+  return im_statLine("☠ Crit Damage", {_value}, "&9")
+
+function im_intelligenceStat(value: number) :: text:
+  return im_statLine("✎ Intelligence", {_value}, "&b")
+
+function im_manaStat(value: number) :: text:
+  return im_statLine("✎ Mana", {_value}, "&9")
+
+function im_miningSpeedStat(value: number) :: text:
+  return im_statLine("⸕ Mining Speed", {_value}, "&a")
+
+function im_miningFortuneStat(value: number) :: text:
+  return im_statLine("☘ Mining Fortune", {_value}, "&b")
+
+function im_farmingFortuneStat(value: number) :: text:
+  return im_statLine("☘ Farming Fortune", {_value}, "&a")
+
+function im_damageStat(value: number) :: text:
+  return im_statLine("❁ Damage", {_value}, "&c")
+
+function im_ferocityStat(value: number) :: text:
+  return im_statLine("⫽ Ferocity", {_value}, "&c")
+
+function im_attackSpeedStat(value: number) :: text:
+  return im_statLine("⚔ Bonus Attack Speed", {_value}, "&e")
+
+# ----------------------------
+# Item Creation Functions
+# ----------------------------
+
+function im_createPickaxe(name: text, rarity: text, miningSpeed: number, miningFortune: number, description: texts) :: item:
+  set {_item} to diamond pickaxe
+  set {_col} to im_rarityColor({_rarity})
+  set name of {_item} to im_cc("%{_col}%%{_name}%")
+
+  set {_stats::1} to im_miningSpeedStat({_miningSpeed})
+  set {_stats::2} to im_miningFortuneStat({_miningFortune})
+
+  set {_abilities::*} to ""
+  clear {_abilities::*}
+
+  set {_lore::*} to im_buildLore({_stats::*}, {_abilities::*}, {_description::*}, {_rarity}, "PICKAXE")
+  set lore of {_item} to {_lore::*}
+  return {_item}
+
+function im_createSword(name: text, rarity: text, damage: number, strength: number, critChance: number, critDamage: number, description: texts) :: item:
+  set {_item} to diamond sword
+  set {_col} to im_rarityColor({_rarity})
+  set name of {_item} to im_cc("%{_col}%%{_name}%")
+
+  set {_stats::1} to im_damageStat({_damage})
+  set {_stats::2} to im_strengthStat({_strength})
+  if {_critChance} > 0:
+    set {_stats::3} to im_critChanceStat({_critChance})
+  if {_critDamage} > 0:
+    set {_stats::4} to im_critDamageStat({_critDamage})
+
+  set {_abilities::*} to ""
+  clear {_abilities::*}
+
+  set {_lore::*} to im_buildLore({_stats::*}, {_abilities::*}, {_description::*}, {_rarity}, "SWORD")
+  set lore of {_item} to {_lore::*}
+  return {_item}
+
+function im_createArmor(baseItem: item, name: text, rarity: text, health: number, defense: number, mana: number, miningSpeed: number, miningFortune: number, itemType: text, description: texts) :: item:
+  set {_item} to {_baseItem}
+  set {_col} to im_rarityColor({_rarity})
+  set name of {_item} to im_cc("%{_col}%%{_name}%")
+
+  set {_statIdx} to 1
+  if {_health} > 0:
+    set {_stats::%{_statIdx}%} to im_healthStat({_health})
+    add 1 to {_statIdx}
+  if {_defense} > 0:
+    set {_stats::%{_statIdx}%} to im_defenseStat({_defense})
+    add 1 to {_statIdx}
+  if {_mana} > 0:
+    set {_stats::%{_statIdx}%} to im_manaStat({_mana})
+    add 1 to {_statIdx}
+  if {_miningSpeed} > 0:
+    set {_stats::%{_statIdx}%} to im_miningSpeedStat({_miningSpeed})
+    add 1 to {_statIdx}
+  if {_miningFortune} > 0:
+    set {_stats::%{_statIdx}%} to im_miningFortuneStat({_miningFortune})
+    add 1 to {_statIdx}
+
+  set {_abilities::*} to ""
+  clear {_abilities::*}
+
+  set {_lore::*} to im_buildLore({_stats::*}, {_abilities::*}, {_description::*}, {_rarity}, {_itemType})
+  set lore of {_item} to {_lore::*}
+  return {_item}
+
+function im_createAccessory(baseItem: item, name: text, rarity: text, health: number, mana: number, defense: number, miningSpeed: number, miningFortune: number, strength: number, accType: text, description: texts) :: item:
+  set {_item} to {_baseItem}
+  set {_col} to im_rarityColor({_rarity})
+  set name of {_item} to im_cc("%{_col}%%{_name}%")
+
+  set {_statIdx} to 1
+  if {_health} > 0:
+    set {_stats::%{_statIdx}%} to im_healthStat({_health})
+    add 1 to {_statIdx}
+  if {_mana} > 0:
+    set {_stats::%{_statIdx}%} to im_manaStat({_mana})
+    add 1 to {_statIdx}
+  if {_defense} > 0:
+    set {_stats::%{_statIdx}%} to im_defenseStat({_defense})
+    add 1 to {_statIdx}
+  if {_miningSpeed} > 0:
+    set {_stats::%{_statIdx}%} to im_miningSpeedStat({_miningSpeed})
+    add 1 to {_statIdx}
+  if {_miningFortune} > 0:
+    set {_stats::%{_statIdx}%} to im_miningFortuneStat({_miningFortune})
+    add 1 to {_statIdx}
+  if {_strength} > 0:
+    set {_stats::%{_statIdx}%} to im_strengthStat({_strength})
+    add 1 to {_statIdx}
+
+  set {_abilities::*} to ""
+  clear {_abilities::*}
+
+  set {_lore::*} to im_buildLore({_stats::*}, {_abilities::*}, {_description::*}, {_rarity}, {_accType})
+  set lore of {_item} to {_lore::*}
+  return {_item}
+
+# ----------------------------
+# /createitem GUI System
+# ----------------------------
+
+function im_openCreateItemMenu(p: player):
+  set {_u} to im_uid({_p})
+  set {_inv} to chest inventory with 6 rows named im_cc("&8Create Custom Item")
+
+  # Fill with glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane named " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Item type selection (top row)
+  set slot 10 of {_inv} to diamond pickaxe named im_cc("&a&lPickaxe") with lore im_cc("&7Create a custom pickaxe") and im_cc("&7with Mining Speed and Fortune") and im_cc("") and im_cc("&eClick to select!")
+
+  set slot 11 of {_inv} to diamond sword named im_cc("&c&lSword") with lore im_cc("&7Create a custom sword") and im_cc("&7with Damage and Strength") and im_cc("") and im_cc("&eClick to select!")
+
+  set slot 12 of {_inv} to diamond chestplate named im_cc("&b&lArmor") with lore im_cc("&7Create custom armor") and im_cc("&7with Health and Defense") and im_cc("") and im_cc("&eClick to select!")
+
+  set slot 13 of {_inv} to emerald named im_cc("&d&lAccessory") with lore im_cc("&7Create a custom accessory") and im_cc("&7for the Equipment GUI") and im_cc("") and im_cc("&eClick to select!")
+
+  set slot 14 of {_inv} to diamond hoe named im_cc("&2&lFarming Tool") with lore im_cc("&7Create a custom farming tool") and im_cc("&7with Farming Fortune") and im_cc("") and im_cc("&eClick to select!")
+
+  set slot 15 of {_inv} to fishing rod named im_cc("&3&lFishing Rod") with lore im_cc("&7Create a custom fishing rod") and im_cc("&7with Sea Creature Chance") and im_cc("") and im_cc("&eClick to select!")
+
+  # Quick presets
+  set slot 28 of {_inv} to golden pickaxe named im_cc("&6Quick Presets") with lore im_cc("&7Pre-made items with") and im_cc("&7balanced stats") and im_cc("") and im_cc("&eClick to view!")
+
+  # Close
+  set slot 49 of {_inv} to barrier named im_cc("&cClose")
+
+  set {im::gui::%{_u}%} to "main"
+  open {_inv} to {_p}
+
+function im_openPickaxeCreator(p: player):
+  set {_u} to im_uid({_p})
+  set {_inv} to chest inventory with 6 rows named im_cc("&8Create Pickaxe")
+
+  # Fill with glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane named " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Get current values
+  set {_name} to {im::create::%{_u}%::name}
+  if {_name} is not set:
+    set {_name} to "Custom Pickaxe"
+  set {_rarity} to {im::create::%{_u}%::rarity}
+  if {_rarity} is not set:
+    set {_rarity} to "COMMON"
+  set {_speed} to {im::create::%{_u}%::speed}
+  if {_speed} is not set:
+    set {_speed} to 100
+  set {_fortune} to {im::create::%{_u}%::fortune}
+  if {_fortune} is not set:
+    set {_fortune} to 50
+
+  set {_col} to im_rarityColor({_rarity})
+
+  # Name setting
+  set slot 10 of {_inv} to name tag named im_cc("&e&lItem Name") with lore im_cc("&7Current: %{_col}%%{_name}%") and im_cc("") and im_cc("&eClick to change!")
+
+  # Rarity setting
+  set {_rarityItem} to nether star named im_cc("&d&lRarity")
+  set lore of {_rarityItem} to im_cc("&7Current: %{_col}%%{_rarity}%") and im_cc("") and im_cc("&eClick to cycle!")
+  set slot 11 of {_inv} to {_rarityItem}
+
+  # Mining Speed
+  set slot 19 of {_inv} to gold ingot named im_cc("&a&lMining Speed") with lore im_cc("&7Current: &a+%{_speed}%") and im_cc("") and im_cc("&aLeft-click: &7+10") and im_cc("&aRight-click: &7-10") and im_cc("&aShift-click: &7Set custom value")
+
+  # Mining Fortune
+  set slot 20 of {_inv} to emerald named im_cc("&b&lMining Fortune") with lore im_cc("&7Current: &b+%{_fortune}%") and im_cc("") and im_cc("&aLeft-click: &7+10") and im_cc("&aRight-click: &7-10") and im_cc("&aShift-click: &7Set custom value")
+
+  # Preview
+  set {_desc::1} to "A custom mining tool"
+  set {_preview} to im_createPickaxe({_name}, {_rarity}, {_speed}, {_fortune}, {_desc::*})
+  set slot 24 of {_inv} to {_preview}
+
+  # Create button
+  set slot 40 of {_inv} to lime stained glass pane named im_cc("&a&lCreate Item!") with lore im_cc("&7Click to create this item") and im_cc("&7and add it to your inventory!")
+
+  # Back button
+  set slot 45 of {_inv} to arrow named im_cc("&7Back")
+
+  # Close
+  set slot 49 of {_inv} to barrier named im_cc("&cClose")
+
+  set {im::gui::%{_u}%} to "pickaxe"
+  set {im::create::%{_u}%::type} to "pickaxe"
+  open {_inv} to {_p}
+
+function im_openAccessoryCreator(p: player):
+  set {_u} to im_uid({_p})
+  set {_inv} to chest inventory with 6 rows named im_cc("&8Create Accessory")
+
+  # Fill with glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane named " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Get current values
+  set {_name} to {im::create::%{_u}%::name}
+  if {_name} is not set:
+    set {_name} to "Custom Accessory"
+  set {_rarity} to {im::create::%{_u}%::rarity}
+  if {_rarity} is not set:
+    set {_rarity} to "UNCOMMON"
+  set {_health} to {im::create::%{_u}%::health}
+  if {_health} is not set:
+    set {_health} to 0
+  set {_mana} to {im::create::%{_u}%::mana}
+  if {_mana} is not set:
+    set {_mana} to 0
+  set {_speed} to {im::create::%{_u}%::speed}
+  if {_speed} is not set:
+    set {_speed} to 0
+  set {_fortune} to {im::create::%{_u}%::fortune}
+  if {_fortune} is not set:
+    set {_fortune} to 0
+  set {_accType} to {im::create::%{_u}%::accType}
+  if {_accType} is not set:
+    set {_accType} to "ACCESSORY"
+
+  set {_col} to im_rarityColor({_rarity})
+
+  # Name setting
+  set slot 10 of {_inv} to name tag named im_cc("&e&lItem Name") with lore im_cc("&7Current: %{_col}%%{_name}%") and im_cc("") and im_cc("&eClick to change!")
+
+  # Rarity setting
+  set slot 11 of {_inv} to nether star named im_cc("&d&lRarity") with lore im_cc("&7Current: %{_col}%%{_rarity}%") and im_cc("") and im_cc("&eClick to cycle!")
+
+  # Accessory Type
+  set slot 12 of {_inv} to emerald named im_cc("&a&lAccessory Type") with lore im_cc("&7Current: &a%{_accType}%") and im_cc("") and im_cc("&7Types: ACCESSORY, TALISMAN,") and im_cc("&7RING, NECKLACE, CHARM") and im_cc("") and im_cc("&eClick to cycle!")
+
+  # Health
+  set slot 19 of {_inv} to redstone named im_cc("&c&lHealth") with lore im_cc("&7Current: &c+%{_health}%") and im_cc("") and im_cc("&aLeft-click: &7+5") and im_cc("&aRight-click: &7-5")
+
+  # Mana
+  set slot 20 of {_inv} to lapis lazuli named im_cc("&9&lMana") with lore im_cc("&7Current: &9+%{_mana}%") and im_cc("") and im_cc("&aLeft-click: &7+5") and im_cc("&aRight-click: &7-5")
+
+  # Mining Speed
+  set slot 21 of {_inv} to gold ingot named im_cc("&a&lMining Speed") with lore im_cc("&7Current: &a+%{_speed}%") and im_cc("") and im_cc("&aLeft-click: &7+10") and im_cc("&aRight-click: &7-10")
+
+  # Mining Fortune
+  set slot 22 of {_inv} to emerald block named im_cc("&b&lMining Fortune") with lore im_cc("&7Current: &b+%{_fortune}%") and im_cc("") and im_cc("&aLeft-click: &7+10") and im_cc("&aRight-click: &7-10")
+
+  # Preview
+  set {_desc::1} to "A custom accessory"
+  set {_baseItem} to gold nugget
+  set {_preview} to im_createAccessory({_baseItem}, {_name}, {_rarity}, {_health}, {_mana}, 0, {_speed}, {_fortune}, 0, {_accType}, {_desc::*})
+  set slot 25 of {_inv} to {_preview}
+
+  # Create button
+  set slot 40 of {_inv} to lime stained glass pane named im_cc("&a&lCreate Item!") with lore im_cc("&7Click to create this item") and im_cc("&7and add it to your inventory!")
+
+  # Back button
+  set slot 45 of {_inv} to arrow named im_cc("&7Back")
+
+  # Close
+  set slot 49 of {_inv} to barrier named im_cc("&cClose")
+
+  set {im::gui::%{_u}%} to "accessory"
+  set {im::create::%{_u}%::type} to "accessory"
+  open {_inv} to {_p}
+
+function im_openArmorCreator(p: player):
+  set {_u} to im_uid({_p})
+  set {_inv} to chest inventory with 6 rows named im_cc("&8Create Armor")
+
+  # Fill with glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane named " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Get current values
+  set {_name} to {im::create::%{_u}%::name}
+  if {_name} is not set:
+    set {_name} to "Custom Armor"
+  set {_rarity} to {im::create::%{_u}%::rarity}
+  if {_rarity} is not set:
+    set {_rarity} to "RARE"
+  set {_health} to {im::create::%{_u}%::health}
+  if {_health} is not set:
+    set {_health} to 50
+  set {_defense} to {im::create::%{_u}%::defense}
+  if {_defense} is not set:
+    set {_defense} to 25
+  set {_armorType} to {im::create::%{_u}%::armorType}
+  if {_armorType} is not set:
+    set {_armorType} to "HELMET"
+
+  set {_col} to im_rarityColor({_rarity})
+
+  # Name setting
+  set slot 10 of {_inv} to name tag named im_cc("&e&lItem Name") with lore im_cc("&7Current: %{_col}%%{_name}%") and im_cc("") and im_cc("&eClick to change!")
+
+  # Rarity setting
+  set slot 11 of {_inv} to nether star named im_cc("&d&lRarity") with lore im_cc("&7Current: %{_col}%%{_rarity}%") and im_cc("") and im_cc("&eClick to cycle!")
+
+  # Armor Type
+  set slot 12 of {_inv} to diamond chestplate named im_cc("&b&lArmor Piece") with lore im_cc("&7Current: &b%{_armorType}%") and im_cc("") and im_cc("&eClick to cycle!")
+
+  # Health
+  set slot 19 of {_inv} to redstone named im_cc("&c&lHealth") with lore im_cc("&7Current: &c+%{_health}%") and im_cc("") and im_cc("&aLeft-click: &7+10") and im_cc("&aRight-click: &7-10")
+
+  # Defense
+  set slot 20 of {_inv} to iron ingot named im_cc("&a&lDefense") with lore im_cc("&7Current: &a+%{_defense}%") and im_cc("") and im_cc("&aLeft-click: &7+5") and im_cc("&aRight-click: &7-5")
+
+  # Preview
+  set {_baseItem} to diamond helmet
+  if {_armorType} is "CHESTPLATE":
+    set {_baseItem} to diamond chestplate
+  else if {_armorType} is "LEGGINGS":
+    set {_baseItem} to diamond leggings
+  else if {_armorType} is "BOOTS":
+    set {_baseItem} to diamond boots
+
+  set {_desc::1} to "A custom armor piece"
+  set {_preview} to im_createArmor({_baseItem}, {_name}, {_rarity}, {_health}, {_defense}, 0, 0, 0, {_armorType}, {_desc::*})
+  set slot 25 of {_inv} to {_preview}
+
+  # Create button
+  set slot 40 of {_inv} to lime stained glass pane named im_cc("&a&lCreate Item!") with lore im_cc("&7Click to create this item") and im_cc("&7and add it to your inventory!")
+
+  # Back button
+  set slot 45 of {_inv} to arrow named im_cc("&7Back")
+
+  # Close
+  set slot 49 of {_inv} to barrier named im_cc("&cClose")
+
+  set {im::gui::%{_u}%} to "armor"
+  set {im::create::%{_u}%::type} to "armor"
+  open {_inv} to {_p}
+
+function im_openPresets(p: player):
+  set {_u} to im_uid({_p})
+  set {_inv} to chest inventory with 6 rows named im_cc("&8Quick Presets")
+
+  # Fill with glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane named " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+
+  # Starter Pickaxe
+  set {_desc1::1} to "A basic mining tool for"
+  set {_desc1::2} to "beginning miners."
+  set {_pick1} to im_createPickaxe("Rookie Pickaxe", "COMMON", 50, 0, {_desc1::*})
+  set slot 10 of {_inv} to {_pick1}
+
+  # Iron Pickaxe
+  set {_desc2::1} to "An improved pickaxe"
+  set {_desc2::2} to "for aspiring miners."
+  set {_pick2} to im_createPickaxe("Miner's Pickaxe", "UNCOMMON", 150, 25, {_desc2::*})
+  set slot 11 of {_inv} to {_pick2}
+
+  # Diamond Pickaxe
+  set {_desc3::1} to "A powerful pickaxe"
+  set {_desc3::2} to "for experienced miners."
+  set {_pick3} to im_createPickaxe("Expert Pickaxe", "RARE", 300, 75, {_desc3::*})
+  set slot 12 of {_inv} to {_pick3}
+
+  # Legendary Pickaxe
+  set {_desc4::1} to "An ancient pickaxe"
+  set {_desc4::2} to "forged in the depths."
+  set {_pick4} to im_createPickaxe("Gemstone Pickaxe", "LEGENDARY", 500, 150, {_desc4::*})
+  set slot 13 of {_inv} to {_pick4}
+
+  # Basic Accessory
+  set {_accDesc1::1} to "A simple ring that"
+  set {_accDesc1::2} to "enhances mining."
+  set {_acc1} to im_createAccessory(gold nugget, "Mining Ring", "UNCOMMON", 0, 0, 0, 25, 10, 0, "RING", {_accDesc1::*})
+  set slot 19 of {_inv} to {_acc1}
+
+  # Fortune Talisman
+  set {_accDesc2::1} to "A lucky charm that"
+  set {_accDesc2::2} to "increases fortune."
+  set {_acc2} to im_createAccessory(emerald, "Fortune Talisman", "RARE", 0, 0, 0, 0, 50, 0, "TALISMAN", {_accDesc2::*})
+  set slot 20 of {_inv} to {_acc2}
+
+  # Health Necklace
+  set {_accDesc3::1} to "A protective necklace"
+  set {_accDesc3::2} to "that boosts health."
+  set {_acc3} to im_createAccessory(gold ingot, "Vitality Necklace", "RARE", 25, 10, 0, 0, 0, 0, "NECKLACE", {_accDesc3::*})
+  set slot 21 of {_inv} to {_acc3}
+
+  # Back button
+  set slot 45 of {_inv} to arrow named im_cc("&7Back")
+
+  # Close
+  set slot 49 of {_inv} to barrier named im_cc("&cClose")
+
+  set {im::gui::%{_u}%} to "presets"
+  open {_inv} to {_p}
+
+# ----------------------------
 # Commands
-# --------------------------
+# ----------------------------
 
-# Give custom items (future-proof entry point)
+command /createitem:
+  permission: {@admin_perm}
+  permission message: &cNo permission.
+  trigger:
+    # Clear previous creation data
+    set {_u} to im_uid(player)
+    delete {im::create::%{_u}%::*}
+    im_openCreateItemMenu(player)
+
 command /giveitem <player> <text> [<number>]:
   permission: {@admin_perm}
   trigger:
     set {_t} to lowercase argument 2
     set {_p} to argument 1
-
-    # Default amount (used as stat amount)
     set {_amt} to 10
     if argument 3 is set:
       set {_amt} to argument 3
 
-    # --- Test items ---
-    if {_t} is "testring":
-      set {_it} to iron nugget named "&fTest Ring"
-      set lore of {_it} to "Accessory" and "HP Bonus: 10"
-      give {_it} to {_p}
+    # Pickaxes
+    if {_t} is "rookie_pickaxe":
+      set {_desc::1} to "A basic mining tool."
+      give im_createPickaxe("Rookie Pickaxe", "COMMON", 50, 0, {_desc::*}) to {_p}
+      send "&aGave Rookie Pickaxe to %name of {_p}%." to player
+      stop
+    if {_t} is "miner_pickaxe":
+      set {_desc::1} to "An improved pickaxe."
+      give im_createPickaxe("Miner's Pickaxe", "UNCOMMON", 150, 25, {_desc::*}) to {_p}
+      send "&aGave Miner's Pickaxe to %name of {_p}%." to player
+      stop
+    if {_t} is "expert_pickaxe":
+      set {_desc::1} to "A powerful pickaxe."
+      give im_createPickaxe("Expert Pickaxe", "RARE", 300, 75, {_desc::*}) to {_p}
+      send "&aGave Expert Pickaxe to %name of {_p}%." to player
+      stop
+    if {_t} is "gemstone_pickaxe":
+      set {_desc::1} to "An ancient pickaxe."
+      give im_createPickaxe("Gemstone Pickaxe", "LEGENDARY", 500, 150, {_desc::*}) to {_p}
+      send "&aGave Gemstone Pickaxe to %name of {_p}%." to player
       stop
 
-    if {_t} is "testcharm":
-      set {_it} to prismarine shard named "&bTest Charm"
-      set lore of {_it} to "Accessory" and "Mana Bonus: 5"
-      give {_it} to {_p}
+    # Accessories
+    if {_t} is "mining_ring":
+      set {_desc::1} to "A simple mining ring."
+      give im_createAccessory(gold nugget, "Mining Ring", "UNCOMMON", 0, 0, 0, 25, 10, 0, "RING", {_desc::*}) to {_p}
+      send "&aGave Mining Ring to %name of {_p}%." to player
+      stop
+    if {_t} is "fortune_talisman":
+      set {_desc::1} to "A lucky charm."
+      give im_createAccessory(emerald, "Fortune Talisman", "RARE", 0, 0, 0, 0, 50, 0, "TALISMAN", {_desc::*}) to {_p}
+      send "&aGave Fortune Talisman to %name of {_p}%." to player
+      stop
+    if {_t} is "speed_necklace":
+      set {_desc::1} to "Enhances mining speed."
+      give im_createAccessory(gold ingot, "Speed Necklace", "RARE", 0, 0, 0, 50, 0, 0, "NECKLACE", {_desc::*}) to {_p}
+      send "&aGave Speed Necklace to %name of {_p}%." to player
+      stop
+    if {_t} is "health_talisman":
+      set {_desc::1} to "Boosts max health."
+      give im_createAccessory(redstone, "Health Talisman", "UNCOMMON", 15, 0, 0, 0, 0, 0, "TALISMAN", {_desc::*}) to {_p}
+      send "&aGave Health Talisman to %name of {_p}%." to player
+      stop
+    if {_t} is "mana_charm":
+      set {_desc::1} to "Increases mana pool."
+      give im_createAccessory(lapis lazuli, "Mana Charm", "UNCOMMON", 0, 25, 0, 0, 0, 0, "CHARM", {_desc::*}) to {_p}
+      send "&aGave Mana Charm to %name of {_p}%." to player
       stop
 
-    if {_t} is "testamulet":
-      set {_it} to amethyst shard named "&dTest Amulet"
-      set lore of {_it} to "Accessory" and "HP Bonus: 5" and "Mana Bonus: 5"
-      give {_it} to {_p}
+    # Armor
+    if {_t} is "miner_helmet":
+      set {_desc::1} to "Helmet for miners."
+      give im_createArmor(diamond helmet, "Miner's Helmet", "RARE", 50, 30, 0, 25, 0, "HELMET", {_desc::*}) to {_p}
+      send "&aGave Miner's Helmet to %name of {_p}%." to player
+      stop
+    if {_t} is "miner_chestplate":
+      set {_desc::1} to "Chestplate for miners."
+      give im_createArmor(diamond chestplate, "Miner's Chestplate", "RARE", 100, 60, 0, 25, 0, "CHESTPLATE", {_desc::*}) to {_p}
+      send "&aGave Miner's Chestplate to %name of {_p}%." to player
+      stop
+    if {_t} is "miner_leggings":
+      set {_desc::1} to "Leggings for miners."
+      give im_createArmor(diamond leggings, "Miner's Leggings", "RARE", 75, 45, 0, 25, 0, "LEGGINGS", {_desc::*}) to {_p}
+      send "&aGave Miner's Leggings to %name of {_p}%." to player
+      stop
+    if {_t} is "miner_boots":
+      set {_desc::1} to "Boots for miners."
+      give im_createArmor(diamond boots, "Miner's Boots", "RARE", 40, 25, 0, 25, 0, "BOOTS", {_desc::*}) to {_p}
+      send "&aGave Miner's Boots to %name of {_p}%." to player
       stop
 
-    # --- Generic accessories ---
-    if {_t} is "accessory_hp":
-      set {_it} to redstone named "&cHP Accessory"
-      set lore of {_it} to "Accessory" and "HP Bonus: %{_amt}%"
-      give {_it} to {_p}
-      stop
+    send "&cUnknown item. Try: rookie_pickaxe, miner_pickaxe, expert_pickaxe, gemstone_pickaxe, mining_ring, fortune_talisman, speed_necklace, health_talisman, mana_charm, miner_helmet, miner_chestplate, miner_leggings, miner_boots" to player
 
-    if {_t} is "accessory_mana":
-      set {_it} to lapis lazuli named "&bMana Accessory"
-      set lore of {_it} to "Accessory" and "Mana Bonus: %{_amt}%"
-      give {_it} to {_p}
-      stop
-
-
-    if {_t} is "xprune":
-      set {_it} to amethyst shard named "&aXP Rune"
-      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
-      set {_count} to 1
-      if argument 3 is set:
-        set {_count} to argument 3
-      set amount of {_it} to {_count}
-      give {_it} to {_p}
-      stop
-    if {_t} is "rune_xp":
-      set {_it} to amethyst shard named "&aXP Rune"
-      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
-      set {_count} to 1
-      if argument 3 is set:
-        set {_count} to argument 3
-      set amount of {_it} to {_count}
-      give {_it} to {_p}
-      stop
-    if {_t} is "xprunerune":
-      set {_it} to amethyst shard named "&aXP Rune"
-      set lore of {_it} to "&8Drop onto a tool in your inventory" and "&8Adds &8[&a⋆&8] &8prefix" and "&8XP from that tool: &a1.75x"
-      set {_count} to 1
-      if argument 3 is set:
-        set {_count} to argument 3
-      set amount of {_it} to {_count}
-      give {_it} to {_p}
-      stop
-    
-    # --- Hypixel-style Accessories ---
-    if {_t} is "necklace_speed":
-      set {_it} to gold nugget named "&6&lMining Speed Necklace"
-      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &aMining Speed&7." and "&7" and "&aMining Speed: &a+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
-      give {_it} to {_p}
-      stop
-    
-    if {_t} is "ring_fortune":
-      set {_it} to emerald named "&a&lMining Fortune Ring"
-      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &bMining Fortune&7." and "&7" and "&bMining Fortune: &b+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
-      give {_it} to {_p}
-      stop
-    
-    if {_t} is "talisman_hp":
-      set {_it} to redstone named "&c&lHealth Talisman"
-      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &cHealth&7." and "&7" and "&cHealth: &c+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
-      give {_it} to {_p}
-      stop
-    
-    if {_t} is "talisman_mana":
-      set {_it} to lapis lazuli named "&9&lMana Talisman"
-      set lore of {_it} to "&8&lACCESSORY" and "&7" and "&7Grants bonus &9Mana&7." and "&7" and "&9Mana: &9+%{_amt}%" and "&7" and "&8Place in Equipment GUI"
-      give {_it} to {_p}
-      stop
-    
-    send "&cUnknown item type. &7Try: testring, testcharm, testamulet, accessory_hp, accessory_mana, necklace_speed, ring_fortune, talisman_hp, talisman_mana" to player
-
-# --------------------------
-# Click handling
-# --------------------------
+# ----------------------------
+# GUI Click Handling
+# ----------------------------
 
 on inventory click:
-  # XP Rune: while HOLDING the rune in your hand, click a tool in your inventory to apply
-  if clicked inventory is player's inventory:
-    set {_hand} to tool of player
-    if isXPRuneItem({_hand}) is true:
-      # Must click an actual item slot
-      set {_slotNum} to clicked slot
-      if {_slotNum} is not set:
-        stop
-      set {_clickedItem} to slot {_slotNum} of clicked inventory
-      if {_clickedItem} is not set:
-        stop
-      if type of {_clickedItem} is air:
-        stop
-      if isEligibleRuneTarget({_clickedItem}) is true:
-        cancel event
-        set {_tool} to {_clickedItem}
-        if applyXPRuneToTool(player, {_tool}) is true:
-          set slot {_slotNum} of clicked inventory to {_tool}
-          # Consume 1 rune from hand
-          if amount of {_hand} <= 1:
-            set tool of player to air
-          else:
-            subtract 1 from amount of {_hand}
-            set tool of player to {_hand}
-          send "&aApplied &fXP Rune&a. &8(1.75x XP)" to player
-        else:
-          send "&cThat item already has an XP Rune." to player
-        stop
+  set {_u} to im_uid(player)
+  set {_invName} to name of event-inventory
 
-
-# --------------------------
-# XP Rune multiplier hooks (works with tab_levels_ranks.sk XP system)
-# Applies +75% bonus XP after the base XP is awarded (=> 1.75x total).
-# --------------------------
-
-
-# --------------------------
-# XP Rune bonus XP
-# Adds +75% (total 1.75x) of whatever base XP the main XP system just awarded.
-# This does NOT require editing your tab script, but it DOES expect your level system to:
-#  - store XP in {xp::%uuid%}
-#  - have the /levelxpadd <player> <amount> command (from your tab_levels_ranks.sk)
-# --------------------------
-
-on break:
-  if gamemode of player is creative:
+  if {_invName} is not set:
     stop
-  if hasXPRuneOnTool(tool of player) is false:
-    stop
-  set {_u} to "%uuid of player%"
-  set {_before} to {xp::%{_u}%}
-  if {_before} is not set:
-    set {_before} to 0
-  wait 1 tick
-  set {_after} to {xp::%{_u}%}
-  if {_after} is not set:
-    set {_after} to 0
-  set {_gain} to {_after} - {_before}
-  if {_gain} <= 0:
-    stop
-  set {_bonus} to {_gain} * 0.75
-  if {_bonus} <= 0:
-    stop
-  execute console command "levelxpadd %name of player% %{_bonus}%"
 
-on fishing state change:
-  if event-fishing state is fish caught:
-    if gamemode of player is creative:
+  # Main menu
+  if {_invName} is im_cc("&8Create Custom Item"):
+    if clicked inventory is player's inventory:
       stop
-    if hasXPRuneOnTool(tool of player) is false:
+    cancel event
+
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
       stop
-    set {_u} to "%uuid of player%"
-    set {_before} to {xp::%{_u}%}
-    if {_before} is not set:
-      set {_before} to 0
+
+    if {_slotNum} is 10:
+      # Pickaxe
+      delete {im::create::%{_u}%::*}
+      wait 1 tick
+      im_openPickaxeCreator(player)
+      stop
+    if {_slotNum} is 11:
+      # Sword (placeholder)
+      send im_cc("&eSword creator coming soon!") to player
+      stop
+    if {_slotNum} is 12:
+      # Armor
+      delete {im::create::%{_u}%::*}
+      wait 1 tick
+      im_openArmorCreator(player)
+      stop
+    if {_slotNum} is 13:
+      # Accessory
+      delete {im::create::%{_u}%::*}
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+    if {_slotNum} is 14:
+      # Farming tool (placeholder)
+      send im_cc("&eFarming tool creator coming soon!") to player
+      stop
+    if {_slotNum} is 15:
+      # Fishing rod (placeholder)
+      send im_cc("&eFishing rod creator coming soon!") to player
+      stop
+    if {_slotNum} is 28:
+      # Presets
+      wait 1 tick
+      im_openPresets(player)
+      stop
+    if {_slotNum} is 49:
+      close player's inventory
+      stop
+    stop
+
+  # Pickaxe creator
+  if {_invName} is im_cc("&8Create Pickaxe"):
+    if clicked inventory is player's inventory:
+      stop
+    cancel event
+
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+
+    # Name change
+    if {_slotNum} is 10:
+      set {im::chat::%{_u}%::type} to "name"
+      close player's inventory
+      send im_cc("&eType the item name in chat. Type &ccancel &eto cancel.") to player
+      stop
+
+    # Rarity cycle
+    if {_slotNum} is 11:
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "COMMON"
+      if {_rarity} is "COMMON":
+        set {im::create::%{_u}%::rarity} to "UNCOMMON"
+      else if {_rarity} is "UNCOMMON":
+        set {im::create::%{_u}%::rarity} to "RARE"
+      else if {_rarity} is "RARE":
+        set {im::create::%{_u}%::rarity} to "EPIC"
+      else if {_rarity} is "EPIC":
+        set {im::create::%{_u}%::rarity} to "LEGENDARY"
+      else if {_rarity} is "LEGENDARY":
+        set {im::create::%{_u}%::rarity} to "MYTHIC"
+      else:
+        set {im::create::%{_u}%::rarity} to "COMMON"
+      wait 1 tick
+      im_openPickaxeCreator(player)
+      stop
+
+    # Mining Speed adjust
+    if {_slotNum} is 19:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::speed} is not set:
+          set {im::create::%{_u}%::speed} to 100
+        add 10 to {im::create::%{_u}%::speed}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::speed} is not set:
+          set {im::create::%{_u}%::speed} to 100
+        subtract 10 from {im::create::%{_u}%::speed}
+        if {im::create::%{_u}%::speed} < 0:
+          set {im::create::%{_u}%::speed} to 0
+      wait 1 tick
+      im_openPickaxeCreator(player)
+      stop
+
+    # Mining Fortune adjust
+    if {_slotNum} is 20:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::fortune} is not set:
+          set {im::create::%{_u}%::fortune} to 50
+        add 10 to {im::create::%{_u}%::fortune}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::fortune} is not set:
+          set {im::create::%{_u}%::fortune} to 50
+        subtract 10 from {im::create::%{_u}%::fortune}
+        if {im::create::%{_u}%::fortune} < 0:
+          set {im::create::%{_u}%::fortune} to 0
+      wait 1 tick
+      im_openPickaxeCreator(player)
+      stop
+
+    # Create button
+    if {_slotNum} is 40:
+      set {_name} to {im::create::%{_u}%::name}
+      if {_name} is not set:
+        set {_name} to "Custom Pickaxe"
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "COMMON"
+      set {_speed} to {im::create::%{_u}%::speed}
+      if {_speed} is not set:
+        set {_speed} to 100
+      set {_fortune} to {im::create::%{_u}%::fortune}
+      if {_fortune} is not set:
+        set {_fortune} to 50
+
+      set {_desc::1} to "A custom mining tool"
+      set {_item} to im_createPickaxe({_name}, {_rarity}, {_speed}, {_fortune}, {_desc::*})
+      give {_item} to player
+      send im_cc("&aCreated your custom pickaxe!") to player
+      close player's inventory
+      stop
+
+    # Back
+    if {_slotNum} is 45:
+      wait 1 tick
+      im_openCreateItemMenu(player)
+      stop
+
+    if {_slotNum} is 49:
+      close player's inventory
+      stop
+    stop
+
+  # Accessory creator
+  if {_invName} is im_cc("&8Create Accessory"):
+    if clicked inventory is player's inventory:
+      stop
+    cancel event
+
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+
+    # Name change
+    if {_slotNum} is 10:
+      set {im::chat::%{_u}%::type} to "name"
+      close player's inventory
+      send im_cc("&eType the item name in chat. Type &ccancel &eto cancel.") to player
+      stop
+
+    # Rarity cycle
+    if {_slotNum} is 11:
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "UNCOMMON"
+      if {_rarity} is "COMMON":
+        set {im::create::%{_u}%::rarity} to "UNCOMMON"
+      else if {_rarity} is "UNCOMMON":
+        set {im::create::%{_u}%::rarity} to "RARE"
+      else if {_rarity} is "RARE":
+        set {im::create::%{_u}%::rarity} to "EPIC"
+      else if {_rarity} is "EPIC":
+        set {im::create::%{_u}%::rarity} to "LEGENDARY"
+      else:
+        set {im::create::%{_u}%::rarity} to "COMMON"
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Accessory type cycle
+    if {_slotNum} is 12:
+      set {_type} to {im::create::%{_u}%::accType}
+      if {_type} is not set:
+        set {_type} to "ACCESSORY"
+      if {_type} is "ACCESSORY":
+        set {im::create::%{_u}%::accType} to "TALISMAN"
+      else if {_type} is "TALISMAN":
+        set {im::create::%{_u}%::accType} to "RING"
+      else if {_type} is "RING":
+        set {im::create::%{_u}%::accType} to "NECKLACE"
+      else if {_type} is "NECKLACE":
+        set {im::create::%{_u}%::accType} to "CHARM"
+      else:
+        set {im::create::%{_u}%::accType} to "ACCESSORY"
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Health adjust
+    if {_slotNum} is 19:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::health} is not set:
+          set {im::create::%{_u}%::health} to 0
+        add 5 to {im::create::%{_u}%::health}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::health} is not set:
+          set {im::create::%{_u}%::health} to 0
+        subtract 5 from {im::create::%{_u}%::health}
+        if {im::create::%{_u}%::health} < 0:
+          set {im::create::%{_u}%::health} to 0
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Mana adjust
+    if {_slotNum} is 20:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::mana} is not set:
+          set {im::create::%{_u}%::mana} to 0
+        add 5 to {im::create::%{_u}%::mana}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::mana} is not set:
+          set {im::create::%{_u}%::mana} to 0
+        subtract 5 from {im::create::%{_u}%::mana}
+        if {im::create::%{_u}%::mana} < 0:
+          set {im::create::%{_u}%::mana} to 0
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Mining Speed adjust
+    if {_slotNum} is 21:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::speed} is not set:
+          set {im::create::%{_u}%::speed} to 0
+        add 10 to {im::create::%{_u}%::speed}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::speed} is not set:
+          set {im::create::%{_u}%::speed} to 0
+        subtract 10 from {im::create::%{_u}%::speed}
+        if {im::create::%{_u}%::speed} < 0:
+          set {im::create::%{_u}%::speed} to 0
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Mining Fortune adjust
+    if {_slotNum} is 22:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::fortune} is not set:
+          set {im::create::%{_u}%::fortune} to 0
+        add 10 to {im::create::%{_u}%::fortune}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::fortune} is not set:
+          set {im::create::%{_u}%::fortune} to 0
+        subtract 10 from {im::create::%{_u}%::fortune}
+        if {im::create::%{_u}%::fortune} < 0:
+          set {im::create::%{_u}%::fortune} to 0
+      wait 1 tick
+      im_openAccessoryCreator(player)
+      stop
+
+    # Create button
+    if {_slotNum} is 40:
+      set {_name} to {im::create::%{_u}%::name}
+      if {_name} is not set:
+        set {_name} to "Custom Accessory"
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "UNCOMMON"
+      set {_health} to {im::create::%{_u}%::health}
+      if {_health} is not set:
+        set {_health} to 0
+      set {_mana} to {im::create::%{_u}%::mana}
+      if {_mana} is not set:
+        set {_mana} to 0
+      set {_speed} to {im::create::%{_u}%::speed}
+      if {_speed} is not set:
+        set {_speed} to 0
+      set {_fortune} to {im::create::%{_u}%::fortune}
+      if {_fortune} is not set:
+        set {_fortune} to 0
+      set {_accType} to {im::create::%{_u}%::accType}
+      if {_accType} is not set:
+        set {_accType} to "ACCESSORY"
+
+      set {_desc::1} to "A custom accessory"
+      set {_item} to im_createAccessory(gold nugget, {_name}, {_rarity}, {_health}, {_mana}, 0, {_speed}, {_fortune}, 0, {_accType}, {_desc::*})
+      give {_item} to player
+      send im_cc("&aCreated your custom accessory!") to player
+      close player's inventory
+      stop
+
+    # Back
+    if {_slotNum} is 45:
+      wait 1 tick
+      im_openCreateItemMenu(player)
+      stop
+
+    if {_slotNum} is 49:
+      close player's inventory
+      stop
+    stop
+
+  # Armor creator
+  if {_invName} is im_cc("&8Create Armor"):
+    if clicked inventory is player's inventory:
+      stop
+    cancel event
+
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+
+    # Name change
+    if {_slotNum} is 10:
+      set {im::chat::%{_u}%::type} to "name"
+      close player's inventory
+      send im_cc("&eType the item name in chat. Type &ccancel &eto cancel.") to player
+      stop
+
+    # Rarity cycle
+    if {_slotNum} is 11:
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "RARE"
+      if {_rarity} is "COMMON":
+        set {im::create::%{_u}%::rarity} to "UNCOMMON"
+      else if {_rarity} is "UNCOMMON":
+        set {im::create::%{_u}%::rarity} to "RARE"
+      else if {_rarity} is "RARE":
+        set {im::create::%{_u}%::rarity} to "EPIC"
+      else if {_rarity} is "EPIC":
+        set {im::create::%{_u}%::rarity} to "LEGENDARY"
+      else:
+        set {im::create::%{_u}%::rarity} to "COMMON"
+      wait 1 tick
+      im_openArmorCreator(player)
+      stop
+
+    # Armor type cycle
+    if {_slotNum} is 12:
+      set {_type} to {im::create::%{_u}%::armorType}
+      if {_type} is not set:
+        set {_type} to "HELMET"
+      if {_type} is "HELMET":
+        set {im::create::%{_u}%::armorType} to "CHESTPLATE"
+      else if {_type} is "CHESTPLATE":
+        set {im::create::%{_u}%::armorType} to "LEGGINGS"
+      else if {_type} is "LEGGINGS":
+        set {im::create::%{_u}%::armorType} to "BOOTS"
+      else:
+        set {im::create::%{_u}%::armorType} to "HELMET"
+      wait 1 tick
+      im_openArmorCreator(player)
+      stop
+
+    # Health adjust
+    if {_slotNum} is 19:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::health} is not set:
+          set {im::create::%{_u}%::health} to 50
+        add 10 to {im::create::%{_u}%::health}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::health} is not set:
+          set {im::create::%{_u}%::health} to 50
+        subtract 10 from {im::create::%{_u}%::health}
+        if {im::create::%{_u}%::health} < 0:
+          set {im::create::%{_u}%::health} to 0
+      wait 1 tick
+      im_openArmorCreator(player)
+      stop
+
+    # Defense adjust
+    if {_slotNum} is 20:
+      if click type is left mouse button:
+        if {im::create::%{_u}%::defense} is not set:
+          set {im::create::%{_u}%::defense} to 25
+        add 5 to {im::create::%{_u}%::defense}
+      else if click type is right mouse button:
+        if {im::create::%{_u}%::defense} is not set:
+          set {im::create::%{_u}%::defense} to 25
+        subtract 5 from {im::create::%{_u}%::defense}
+        if {im::create::%{_u}%::defense} < 0:
+          set {im::create::%{_u}%::defense} to 0
+      wait 1 tick
+      im_openArmorCreator(player)
+      stop
+
+    # Create button
+    if {_slotNum} is 40:
+      set {_name} to {im::create::%{_u}%::name}
+      if {_name} is not set:
+        set {_name} to "Custom Armor"
+      set {_rarity} to {im::create::%{_u}%::rarity}
+      if {_rarity} is not set:
+        set {_rarity} to "RARE"
+      set {_health} to {im::create::%{_u}%::health}
+      if {_health} is not set:
+        set {_health} to 50
+      set {_defense} to {im::create::%{_u}%::defense}
+      if {_defense} is not set:
+        set {_defense} to 25
+      set {_armorType} to {im::create::%{_u}%::armorType}
+      if {_armorType} is not set:
+        set {_armorType} to "HELMET"
+
+      set {_baseItem} to diamond helmet
+      if {_armorType} is "CHESTPLATE":
+        set {_baseItem} to diamond chestplate
+      else if {_armorType} is "LEGGINGS":
+        set {_baseItem} to diamond leggings
+      else if {_armorType} is "BOOTS":
+        set {_baseItem} to diamond boots
+
+      set {_desc::1} to "A custom armor piece"
+      set {_item} to im_createArmor({_baseItem}, {_name}, {_rarity}, {_health}, {_defense}, 0, 0, 0, {_armorType}, {_desc::*})
+      give {_item} to player
+      send im_cc("&aCreated your custom armor!") to player
+      close player's inventory
+      stop
+
+    # Back
+    if {_slotNum} is 45:
+      wait 1 tick
+      im_openCreateItemMenu(player)
+      stop
+
+    if {_slotNum} is 49:
+      close player's inventory
+      stop
+    stop
+
+  # Presets menu
+  if {_invName} is im_cc("&8Quick Presets"):
+    if clicked inventory is player's inventory:
+      stop
+    cancel event
+
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+
+    # Give preset items on click
+    set {_clicked} to slot {_slotNum} of event-inventory
+    if {_clicked} is set:
+      if {_clicked} is not air:
+        set {_clickedName} to name of {_clicked}
+        if {_clickedName} is set:
+          if {_clickedName} is not " ":
+            if {_slotNum} is not 45:
+              if {_slotNum} is not 49:
+                give {_clicked} to player
+                send im_cc("&aGave you %{_clickedName}%&a!") to player
+                stop
+
+    # Back
+    if {_slotNum} is 45:
+      wait 1 tick
+      im_openCreateItemMenu(player)
+      stop
+
+    if {_slotNum} is 49:
+      close player's inventory
+      stop
+    stop
+
+# ----------------------------
+# Chat Input Handling
+# ----------------------------
+
+on chat:
+  set {_u} to im_uid(player)
+  if {im::chat::%{_u}%::type} is not set:
+    stop
+
+  cancel event
+
+  if message is "cancel":
+    delete {im::chat::%{_u}%::*}
+    send im_cc("&cCancelled.") to player
     wait 1 tick
-    set {_after} to {xp::%{_u}%}
-    if {_after} is not set:
-      set {_after} to 0
-    set {_gain} to {_after} - {_before}
-    if {_gain} <= 0:
-      stop
-    set {_bonus} to {_gain} * 0.75
-    if {_bonus} <= 0:
-      stop
-    execute console command "levelxpadd %name of player% %{_bonus}%"
+    set {_type} to {im::create::%{_u}%::type}
+    if {_type} is "pickaxe":
+      im_openPickaxeCreator(player)
+    else if {_type} is "accessory":
+      im_openAccessoryCreator(player)
+    else if {_type} is "armor":
+      im_openArmorCreator(player)
+    else:
+      im_openCreateItemMenu(player)
+    stop
 
-on death:
-  if attacker is a player:
-    if victim is a player:
-      stop
-    if gamemode of attacker is creative:
-      stop
-    if hasXPRuneOnTool(tool of attacker) is false:
-      stop
-    set {_u} to "%uuid of attacker%"
-    set {_before} to {xp::%{_u}%}
-    if {_before} is not set:
-      set {_before} to 0
+  if {im::chat::%{_u}%::type} is "name":
+    set {im::create::%{_u}%::name} to message
+    delete {im::chat::%{_u}%::*}
+    send im_cc("&aSet item name to: &f%message%") to player
     wait 1 tick
-    set {_after} to {xp::%{_u}%}
-    if {_after} is not set:
-      set {_after} to 0
-    set {_gain} to {_after} - {_before}
-    if {_gain} <= 0:
-      stop
-    set {_bonus} to {_gain} * 0.75
-    if {_bonus} <= 0:
-      stop
-    execute console command "levelxpadd %name of attacker% %{_bonus}%"
+    set {_type} to {im::create::%{_u}%::type}
+    if {_type} is "pickaxe":
+      im_openPickaxeCreator(player)
+    else if {_type} is "accessory":
+      im_openAccessoryCreator(player)
+    else if {_type} is "armor":
+      im_openArmorCreator(player)
+    else:
+      im_openCreateItemMenu(player)
+    stop
