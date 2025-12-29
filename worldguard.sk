@@ -279,26 +279,34 @@ command /wgblocks [<text>]:
 on inventory click:
   set {_invName} to name of event-inventory
   set {_u} to uuid of player
-  
+
   # Check if it's a WorldGuard GUI
   set {_isWgGui} to false
   if {_invName} contains "World Perms":
     set {_isWgGui} to true
   if {_invName} contains "Block Whitelist":
     set {_isWgGui} to true
-  if {_isWgGui} is true:
-    cancel event
-    set {_wName} to {wggui::world::%{_u}%}
-    if {_wName} is not set:
+
+  # Exit early if not a WG GUI
+  if {_isWgGui} is false:
+    stop
+
+  # Cancel event for all WG GUI clicks
+  cancel event
+
+  set {_wName} to {wggui::world::%{_u}%}
+  if {_wName} is not set:
+    stop
+
+  set {_type} to {wggui::type::%{_u}%}
+  if {_type} is not set:
+    if {_invName} contains "World Perms":
+      set {_type} to "perms"
+    else if {_invName} contains "Block Whitelist":
+      set {_type} to "blocks"
+    else:
       stop
-    set {_type} to {wggui::type::%{_u}%}
-    if {_type} is not set:
-      if {_invName} contains "World Perms":
-        set {_type} to "perms"
-      else if {_invName} contains "Block Whitelist":
-        set {_type} to "blocks"
-      else:
-        stop
+
   if {_type} is "perms":
     if clicked slot is 10:
       if {wgperm::break::%{_wName}%} is true:
@@ -860,6 +868,179 @@ on block fade:
   if {_btStr} is "farmland":
     cancel event
     stop
+
+# Prevent farmland trampling via physics/entity interact
+on entity change block:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::croptrample::%{_wName}%} is not true:
+    stop
+  set {_bt} to type of event-block
+  set {_btStr} to "%{_bt}%"
+  if {_btStr} is "farmland":
+    cancel event
+
+# Prevent crop trampling via physics/entity interact (player jumping)
+on player interact:
+  if click type is physical:
+    set {_wName} to name of world of player
+    wg_init_world({_wName})
+    if {wgperm::croptrample::%{_wName}%} is not true:
+      stop
+    if clicked block is set:
+      set {_bt} to type of clicked block
+      set {_btStr} to "%{_bt}%"
+      if {_btStr} is "farmland":
+        cancel event
+        stop
+      # Check for crops
+      if {_btStr} contains "wheat":
+        cancel event
+        stop
+      if {_btStr} contains "carrot":
+        cancel event
+        stop
+      if {_btStr} contains "potato":
+        cancel event
+        stop
+      if {_btStr} contains "beetroot":
+        cancel event
+        stop
+
+# Block bucket usage (water/lava placement)
+on bucket empty:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::place::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "place") is false:
+      cancel event
+
+# Block bucket fill (water/lava pickup)
+on bucket fill:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "break") is false:
+      cancel event
+
+# Prevent fire spread
+on block spread:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::place::%{_wName}%} is true:
+    set {_bt} to type of event-block
+    set {_btStr} to "%{_bt}%"
+    if {_btStr} contains "fire":
+      cancel event
+
+# Prevent block ignite (flint and steel, fire spread)
+on block ignite:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::place::%{_wName}%} is true:
+    cancel event
+
+# Prevent explosion damage to blocks
+on explode:
+  set {_firstBlock} to first element of exploded blocks
+  if {_firstBlock} is not set:
+    stop
+  set {_wName} to name of world of {_firstBlock}
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    clear exploded blocks
+
+# Prevent entity explosions (creepers, TNT)
+on entity explode:
+  if exploded blocks is set:
+    set {_firstBlock} to first element of exploded blocks
+    if {_firstBlock} is set:
+      set {_wName} to name of world of {_firstBlock}
+      wg_init_world({_wName})
+      if {wgperm::break::%{_wName}%} is true:
+        clear exploded blocks
+
+# Prevent enderman griefing
+on enderman pickup:
+  set {_wName} to name of world of event-entity
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    cancel event
+
+# Prevent piston extension into protected blocks
+on piston extend:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    cancel event
+
+# Prevent piston retraction of protected blocks
+on piston retract:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    cancel event
+
+# Prevent block fertilize (bone meal)
+on block fertilize:
+  set {_wName} to name of world of event-block
+  wg_init_world({_wName})
+  if {wgperm::interact::%{_wName}%} is true:
+    if player is set:
+      if wg_has_bypass(player, {_wName}, "interact") is false:
+        cancel event
+
+# Prevent vehicle placement (boats, minecarts)
+on vehicle create:
+  if player is set:
+    set {_wName} to name of world of event-entity
+    wg_init_world({_wName})
+    if {wgperm::place::%{_wName}%} is true:
+      if wg_has_bypass(player, {_wName}, "place") is false:
+        delete event-entity
+
+# Prevent vehicle destruction
+on vehicle damage:
+  if attacker is a player:
+    set {_wName} to name of world of event-entity
+    wg_init_world({_wName})
+    if {wgperm::break::%{_wName}%} is true:
+      if wg_has_bypass(attacker, {_wName}, "break") is false:
+        cancel event
+
+# Prevent hanging entity (item frame, painting) placement
+on hanging place:
+  set {_wName} to name of world of event-entity
+  wg_init_world({_wName})
+  if {wgperm::place::%{_wName}%} is true:
+    if player is set:
+      if wg_has_bypass(player, {_wName}, "place") is false:
+        cancel event
+
+# Prevent hanging entity breaking
+on hanging break:
+  set {_wName} to name of world of event-entity
+  wg_init_world({_wName})
+  if {wgperm::break::%{_wName}%} is true:
+    if remover is a player:
+      if wg_has_bypass(remover, {_wName}, "break") is false:
+        cancel event
+
+# Prevent armor stand manipulation
+on armor stand manipulate:
+  set {_wName} to name of world of event-entity
+  wg_init_world({_wName})
+  if {wgperm::interact::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "interact") is false:
+      cancel event
+
+# Prevent lectern book take
+on player takes lectern book:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::interact::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "interact") is false:
+      cancel event
 
 
 on damage of living entity:

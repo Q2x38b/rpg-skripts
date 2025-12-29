@@ -185,8 +185,12 @@ function di_showIndicator(e: entity, dmg: number, isCrit: boolean, isHeal: boole
   wait 2 ticks
   if {_stand} is set:
     if {_stand} is not dead:
-      # Ensure custom name is visible
-      set {_stand}'s custom name visibility to true
+      # Ensure custom name is visible using data command
+      set {_sx} to x-coordinate of location of {_stand}
+      set {_sy} to y-coordinate of location of {_stand}
+      set {_sz} to z-coordinate of location of {_stand}
+      set {_swName} to name of world of location of {_stand}
+      execute console command "execute in %{_swName}% run data merge entity @e[type=armor_stand,x=%{_sx}%,y=%{_sy}%,z=%{_sz}%,distance=..1,limit=1] {CustomNameVisible:1b}"
   
   # Animate the indicator (stationary, no movement)
   set {_ticks} to round({@indicator_duration} * 20)
