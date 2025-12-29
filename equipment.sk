@@ -112,29 +112,94 @@ function eq_openEquipmentGui(p: player):
   
   set {_inv} to chest inventory with 6 rows named eq_cc("&8Equipment")
   
-  # Fill background with dark gray glass first
+  # Fill all slots with glass panes with hover text indicating what goes in each slot
   set {_i} to 0
-  set {_glass} to black stained glass pane
-  set name of {_glass} to " "
   while {_i} < 54:
+    set {_glass} to black stained glass pane
+    set {_slotName} to ""
+    set {_slotDesc} to ""
+    
+    # Armor slots with descriptive text
+    if {_i} is 10:
+      set {_glass} to gray stained glass pane
+      set {_slotName} to eq_cc("&7Helmet Slot")
+      set {_slotDesc} to eq_cc("&8Place a helmet here")
+    else if {_i} is 19:
+      set {_glass} to gray stained glass pane
+      set {_slotName} to eq_cc("&7Chestplate Slot")
+      set {_slotDesc} to eq_cc("&8Place a chestplate here")
+    else if {_i} is 28:
+      set {_glass} to gray stained glass pane
+      set {_slotName} to eq_cc("&7Leggings Slot")
+      set {_slotDesc} to eq_cc("&8Place leggings here")
+    else if {_i} is 37:
+      set {_glass} to gray stained glass pane
+      set {_slotName} to eq_cc("&7Boots Slot")
+      set {_slotDesc} to eq_cc("&8Place boots here")
+    # Accessory slots
+    else if {_i} is 16:
+      set {_glass} to light gray stained glass pane
+      set {_slotName} to eq_cc("&7Necklace Slot")
+      set {_slotDesc} to eq_cc("&8Place an accessory here")
+    else if {_i} is 25:
+      set {_glass} to light gray stained glass pane
+      set {_slotName} to eq_cc("&7Ring Slot")
+      set {_slotDesc} to eq_cc("&8Place an accessory here")
+    else if {_i} is 34:
+      set {_glass} to light gray stained glass pane
+      set {_slotName} to eq_cc("&7Talisman Slot 1")
+      set {_slotDesc} to eq_cc("&8Place an accessory here")
+    else if {_i} is 43:
+      set {_glass} to light gray stained glass pane
+      set {_slotName} to eq_cc("&7Talisman Slot 2")
+      set {_slotDesc} to eq_cc("&8Place an accessory here")
+    # Player head slot - will be overwritten later
+    else if {_i} is 22:
+      set {_glass} to black stained glass pane
+      set {_slotName} to eq_cc("&7Player Stats")
+      set {_slotDesc} to eq_cc("&8View your stats here")
+    # Close button slot - will be overwritten later
+    else if {_i} is 49:
+      set {_glass} to black stained glass pane
+      set {_slotName} to eq_cc("&7Close Button")
+      set {_slotDesc} to eq_cc("&8Click to close")
+    # Empty slots
+    else:
+      set {_glass} to black stained glass pane
+      set {_slotName} to eq_cc("&7Empty Slot")
+      set {_slotDesc} to eq_cc("&8This slot is not used")
+    
+    # Set glass pane with hover text if we have a description
+    if {_slotName} is not "":
+      set name of {_glass} to {_slotName}
+      set lore of {_glass} to {_slotDesc}
+    else:
+      set name of {_glass} to " "
     set slot {_i} of {_inv} to {_glass}
     add 1 to {_i}
   
-  # Armor slots (Hypixel style positions)
-  set slot 10 of {_inv} to helmet of {_p}
-  set slot 19 of {_inv} to chestplate of {_p}
-  set slot 28 of {_inv} to leggings of {_p}
-  set slot 37 of {_inv} to boots of {_p}
+  # Place actual items on top of glass (if they exist)
+  if helmet of {_p} is set:
+    set slot 10 of {_inv} to helmet of {_p}
+  if chestplate of {_p} is set:
+    set slot 19 of {_inv} to chestplate of {_p}
+  if leggings of {_p} is set:
+    set slot 28 of {_inv} to leggings of {_p}
+  if boots of {_p} is set:
+    set slot 37 of {_inv} to boots of {_p}
   
-  # Accessory slots (necklace, ring, talisman positions)
-  set slot 13 of {_inv} to {equip::accessories::%{_u}%::necklace}
-  set slot 22 of {_inv} to {equip::accessories::%{_u}%::ring}
-  set slot 31 of {_inv} to {equip::accessories::%{_u}%::talisman1}
-  set slot 40 of {_inv} to {equip::accessories::%{_u}%::talisman2}
+  if {equip::accessories::%{_u}%::necklace} is set:
+    set slot 16 of {_inv} to {equip::accessories::%{_u}%::necklace}
+  if {equip::accessories::%{_u}%::ring} is set:
+    set slot 25 of {_inv} to {equip::accessories::%{_u}%::ring}
+  if {equip::accessories::%{_u}%::talisman1} is set:
+    set slot 34 of {_inv} to {equip::accessories::%{_u}%::talisman1}
+  if {equip::accessories::%{_u}%::talisman2} is set:
+    set slot 43 of {_inv} to {equip::accessories::%{_u}%::talisman2}
   
   set {eqGuiOpen::%{_u}%} to true
   
-  # Stats display
+  # Get stats
   set {_hp} to {equip::hp::%{_u}%}
   if {_hp} is not set:
     set {_hp} to 0
@@ -156,23 +221,20 @@ function eq_openEquipmentGui(p: player):
   if {_baseMana} is not set:
     set {_baseMana} to 100
   
+  # Get level (from levels script)
+  set {_level} to {level::%{_u}%}
+  if {_level} is not set:
+    set {_level} to 1
+  
   # Calculate totals
   set {_totalHp} to {_baseHp} + {_hp}
   set {_totalMana} to {_baseMana} + {_mana}
   
-  # Stats display (top center) - more professional layout
-  set slot 4 of {_inv} to redstone block named eq_cc("&cStats") with lore eq_cc("&8") and eq_cc("&cHealth") and eq_cc("&7Base: &f%{_baseHp}%") and eq_cc("&7Bonus: &a+%{_hp}%") and eq_cc("&7Total: &f%{_totalHp}%") and eq_cc("&8") and eq_cc("&9Mana") and eq_cc("&7Base: &f%{_baseMana}%") and eq_cc("&7Bonus: &9+%{_mana}%") and eq_cc("&7Total: &f%{_totalMana}%") and eq_cc("&8") and eq_cc("&aMining Speed") and eq_cc("&7Bonus: &a+%{_speed}%") and eq_cc("&8") and eq_cc("&bMining Fortune") and eq_cc("&7Bonus: &b+%{_fortune}%")
-  
-  # Labels - cleaner styling
-  set slot 9 of {_inv} to leather helmet named eq_cc("&7Helmet") with lore eq_cc("&8") and eq_cc("&7Place your helmet here")
-  set slot 18 of {_inv} to leather chestplate named eq_cc("&7Chestplate") with lore eq_cc("&8") and eq_cc("&7Place your chestplate here")
-  set slot 27 of {_inv} to leather leggings named eq_cc("&7Leggings") with lore eq_cc("&8") and eq_cc("&7Place your leggings here")
-  set slot 36 of {_inv} to leather boots named eq_cc("&7Boots") with lore eq_cc("&8") and eq_cc("&7Place your boots here")
-  
-  set slot 12 of {_inv} to gold nugget named eq_cc("&6Necklace") with lore eq_cc("&8") and eq_cc("&7Place a necklace accessory here")
-  set slot 21 of {_inv} to emerald named eq_cc("&aRing") with lore eq_cc("&8") and eq_cc("&7Place a ring accessory here")
-  set slot 30 of {_inv} to redstone named eq_cc("&cTalisman") with lore eq_cc("&8") and eq_cc("&7Place a talisman accessory here")
-  set slot 39 of {_inv} to lapis lazuli named eq_cc("&9Talisman") with lore eq_cc("&8") and eq_cc("&7Place a talisman accessory here")
+  # Player head in center (slot 22) with stats on hover
+  set {_head} to player head
+  set name of {_head} to eq_cc("&f%name of {_p}%")
+  set lore of {_head} to eq_cc("&8") and eq_cc("&7Level: &f%{_level}%") and eq_cc("&8") and eq_cc("&cHealth: &f%{_totalHp}% &7(&a+%{_hp}%&7)") and eq_cc("&9Mana: &f%{_totalMana}% &7(&9+%{_mana}%&7)") and eq_cc("&8") and eq_cc("&aMining Speed: &f%{_speed}%") and eq_cc("&bMining Fortune: &f%{_fortune}%") and eq_cc("&8") and eq_cc("&7Hover to view stats")
+  set slot 22 of {_inv} to {_head}
   
   # Close button
   set slot 49 of {_inv} to barrier named eq_cc("&cClose") with lore eq_cc("&8") and eq_cc("&7Click to close the menu")
@@ -201,12 +263,16 @@ on inventory click:
   
   if {eqGuiOpen::%{_u}%} is true:
     # Check if clicking in player's own inventory (not GUI)
-    # When GUI is open, player inventory is still accessible below the GUI
     if clicked inventory is player's inventory:
       stop
     
-    # This is a GUI click - cancel and handle it
-    cancel event
+    # Check inventory name (use converted color code)
+    set {_invName} to name of event-inventory
+    if {_invName} is not set:
+      stop
+    if {_invName} is not eq_cc("&8Equipment"):
+      stop
+    
     set {_slotNum} to clicked slot
     if {_slotNum} is not set:
       stop
@@ -215,132 +281,227 @@ on inventory click:
     if {_slotNum} is 49:
       cancel event
       close player's inventory
+      delete {eqGuiOpen::%{_u}%}
       stop
     
-    # Allow armor slots (10, 19, 28, 37) - these update automatically via vanilla
-    if {_slotNum} is 10:
-      wait 2 ticks
-      eq_recalcStats(player)
-      eq_openEquipmentGui(player)
-      stop
-    if {_slotNum} is 19:
-      wait 2 ticks
-      eq_recalcStats(player)
-      eq_openEquipmentGui(player)
-      stop
-    if {_slotNum} is 28:
-      wait 2 ticks
-      eq_recalcStats(player)
-      eq_openEquipmentGui(player)
-      stop
-    if {_slotNum} is 37:
-      # Allow modification, then recalc stats
-      wait 2 ticks
-      eq_recalcStats(player)
-      eq_openEquipmentGui(player)
-      stop
-    
-    # Accessory slots - handle manually
-    if {_slotNum} is 13:
-      # Necklace slot
-      cancel event
-      set {_oldItem} to {equip::accessories::%{_u}%::necklace}
-      # Get item from cursor - use event-item if available, otherwise skip
-      set {_newItem} to event-item
-      if {_newItem} is set:
-        if eq_isAccessory({_newItem}) is true:
-          set {equip::accessories::%{_u}%::necklace} to {_newItem}
-          if {_oldItem} is set:
-            give {_oldItem} to player
-        else:
-          if {_oldItem} is set:
-            give {_oldItem} to player
-      else:
-        if {_oldItem} is set:
-          give {_oldItem} to player
-        delete {equip::accessories::%{_u}%::necklace}
-      wait 1 tick
-      eq_recalcStats(player)
-      eq_openEquipmentGui(player)
-      stop
-    
+    # Player head (slot 22) - just show stats, don't allow interaction
     if {_slotNum} is 22:
+      cancel event
+      stop
+    
+    # Equipment slots - handle armor equipping
+    # Armor slots (10=helmet, 19=chestplate, 28=leggings, 37=boots) - actually equip to player
+    cancel event
+    
+    if {_slotNum} is 10:
+      # Helmet slot - get item from player's hand
+      set {_itemToEquip} to tool of player
+      set {_currentItem} to slot {_slotNum} of event-inventory
+      
+      # If holding an item, try to equip it
+      if {_itemToEquip} is set:
+        if {_itemToEquip} is not air:
+          set {_itemType} to type of {_itemToEquip}
+          if {_itemType} is leather helmet or {_itemType} is chainmail helmet or {_itemType} is iron helmet or {_itemType} is golden helmet or {_itemType} is diamond helmet or {_itemType} is netherite helmet:
+            set {_oldArmor} to helmet of player
+            if {_oldArmor} is set:
+              if {_oldArmor} is not air:
+                give {_oldArmor} to player
+            set helmet of player to {_itemToEquip}
+            set tool of player to air
+      # If clicking on existing item in slot (removing), unequip
+      else if {_currentItem} is set:
+        if {_currentItem} is not air:
+          set {_oldArmor} to helmet of player
+          if {_oldArmor} is set:
+            if {_oldArmor} is not air:
+              give {_oldArmor} to player
+              set helmet of player to air
+      wait 1 tick
+      eq_recalcStats(player)
+      eq_openEquipmentGui(player)
+      stop
+    
+    if {_slotNum} is 19:
+      # Chestplate slot
+      set {_itemToEquip} to tool of player
+      set {_currentItem} to slot {_slotNum} of event-inventory
+      
+      if {_itemToEquip} is set:
+        if {_itemToEquip} is not air:
+          set {_itemType} to type of {_itemToEquip}
+          if {_itemType} is leather chestplate or {_itemType} is chainmail chestplate or {_itemType} is iron chestplate or {_itemType} is golden chestplate or {_itemType} is diamond chestplate or {_itemType} is netherite chestplate:
+            set {_oldArmor} to chestplate of player
+            if {_oldArmor} is set:
+              if {_oldArmor} is not air:
+                give {_oldArmor} to player
+            set chestplate of player to {_itemToEquip}
+            set tool of player to air
+      else if {_currentItem} is set:
+        if {_currentItem} is not air:
+          set {_oldArmor} to chestplate of player
+          if {_oldArmor} is set:
+            if {_oldArmor} is not air:
+              give {_oldArmor} to player
+              set chestplate of player to air
+      wait 1 tick
+      eq_recalcStats(player)
+      eq_openEquipmentGui(player)
+      stop
+    
+    if {_slotNum} is 28:
+      # Leggings slot
+      set {_itemToEquip} to tool of player
+      set {_currentItem} to slot {_slotNum} of event-inventory
+      
+      if {_itemToEquip} is set:
+        if {_itemToEquip} is not air:
+          set {_itemType} to type of {_itemToEquip}
+          if {_itemType} is leather leggings or {_itemType} is chainmail leggings or {_itemType} is iron leggings or {_itemType} is golden leggings or {_itemType} is diamond leggings or {_itemType} is netherite leggings:
+            set {_oldArmor} to leggings of player
+            if {_oldArmor} is set:
+              if {_oldArmor} is not air:
+                give {_oldArmor} to player
+            set leggings of player to {_itemToEquip}
+            set tool of player to air
+      else if {_currentItem} is set:
+        if {_currentItem} is not air:
+          set {_oldArmor} to leggings of player
+          if {_oldArmor} is set:
+            if {_oldArmor} is not air:
+              give {_oldArmor} to player
+              set leggings of player to air
+      wait 1 tick
+      eq_recalcStats(player)
+      eq_openEquipmentGui(player)
+      stop
+    
+    if {_slotNum} is 37:
+      # Boots slot
+      set {_itemToEquip} to tool of player
+      set {_currentItem} to slot {_slotNum} of event-inventory
+      
+      if {_itemToEquip} is set:
+        if {_itemToEquip} is not air:
+          set {_itemType} to type of {_itemToEquip}
+          if {_itemType} is leather boots or {_itemType} is chainmail boots or {_itemType} is iron boots or {_itemType} is golden boots or {_itemType} is diamond boots or {_itemType} is netherite boots:
+            set {_oldArmor} to boots of player
+            if {_oldArmor} is set:
+              if {_oldArmor} is not air:
+                give {_oldArmor} to player
+            set boots of player to {_itemToEquip}
+            set tool of player to air
+      else if {_currentItem} is set:
+        if {_currentItem} is not air:
+          set {_oldArmor} to boots of player
+          if {_oldArmor} is set:
+            if {_oldArmor} is not air:
+              give {_oldArmor} to player
+              set boots of player to air
+      wait 1 tick
+      eq_recalcStats(player)
+      eq_openEquipmentGui(player)
+      stop
+    
+    # Accessory slots - handle manually but allow dropping
+    if {_slotNum} is 16:
+      # Necklace slot - allow dropping
+      set {_oldItem} to {equip::accessories::%{_u}%::necklace}
+      set {_newItem} to slot {_slotNum} of event-inventory
+      if {_newItem} is set:
+        if {_newItem} is not air:
+          if eq_isAccessory({_newItem}) is true:
+            set {equip::accessories::%{_u}%::necklace} to {_newItem}
+            if {_oldItem} is set:
+              give {_oldItem} to player
+          else:
+            # Not an accessory - give back old item if exists
+            if {_oldItem} is set:
+              give {_oldItem} to player
+        else:
+          # Slot is empty - return old item
+          if {_oldItem} is set:
+            give {_oldItem} to player
+            delete {equip::accessories::%{_u}%::necklace}
+      wait 1 tick
+      eq_recalcStats(player)
+      eq_openEquipmentGui(player)
+      stop
+    
+    if {_slotNum} is 25:
       # Ring slot
-      cancel event
       set {_oldItem} to {equip::accessories::%{_u}%::ring}
-      # Get item from cursor - use event-item if available, otherwise skip
-      set {_newItem} to event-item
+      set {_newItem} to slot {_slotNum} of event-inventory
       if {_newItem} is set:
-        if eq_isAccessory({_newItem}) is true:
-          set {equip::accessories::%{_u}%::ring} to {_newItem}
-          if {_oldItem} is set:
-            give {_oldItem} to player
+        if {_newItem} is not air:
+          if eq_isAccessory({_newItem}) is true:
+            set {equip::accessories::%{_u}%::ring} to {_newItem}
+            if {_oldItem} is set:
+              give {_oldItem} to player
+          else:
+            if {_oldItem} is set:
+              give {_oldItem} to player
         else:
           if {_oldItem} is set:
             give {_oldItem} to player
-      else:
-        if {_oldItem} is set:
-          give {_oldItem} to player
-        delete {equip::accessories::%{_u}%::ring}
+            delete {equip::accessories::%{_u}%::ring}
       wait 1 tick
       eq_recalcStats(player)
       eq_openEquipmentGui(player)
       stop
     
-    if {_slotNum} is 31:
+    if {_slotNum} is 34:
       # Talisman 1 slot
-      cancel event
       set {_oldItem} to {equip::accessories::%{_u}%::talisman1}
-      # Get item from cursor - use event-item if available, otherwise skip
-      set {_newItem} to event-item
+      set {_newItem} to slot {_slotNum} of event-inventory
       if {_newItem} is set:
-        if eq_isAccessory({_newItem}) is true:
-          set {equip::accessories::%{_u}%::talisman1} to {_newItem}
-          if {_oldItem} is set:
-            give {_oldItem} to player
+        if {_newItem} is not air:
+          if eq_isAccessory({_newItem}) is true:
+            set {equip::accessories::%{_u}%::talisman1} to {_newItem}
+            if {_oldItem} is set:
+              give {_oldItem} to player
+          else:
+            if {_oldItem} is set:
+              give {_oldItem} to player
         else:
           if {_oldItem} is set:
             give {_oldItem} to player
-      else:
-        if {_oldItem} is set:
-          give {_oldItem} to player
-        delete {equip::accessories::%{_u}%::talisman1}
+            delete {equip::accessories::%{_u}%::talisman1}
       wait 1 tick
       eq_recalcStats(player)
       eq_openEquipmentGui(player)
       stop
     
-    if {_slotNum} is 40:
+    if {_slotNum} is 43:
       # Talisman 2 slot
-      cancel event
       set {_oldItem} to {equip::accessories::%{_u}%::talisman2}
-      # Get item from cursor - use event-item if available, otherwise skip
-      set {_newItem} to event-item
+      set {_newItem} to slot {_slotNum} of event-inventory
       if {_newItem} is set:
-        if eq_isAccessory({_newItem}) is true:
-          set {equip::accessories::%{_u}%::talisman2} to {_newItem}
-          if {_oldItem} is set:
-            give {_oldItem} to player
+        if {_newItem} is not air:
+          if eq_isAccessory({_newItem}) is true:
+            set {equip::accessories::%{_u}%::talisman2} to {_newItem}
+            if {_oldItem} is set:
+              give {_oldItem} to player
+          else:
+            if {_oldItem} is set:
+              give {_oldItem} to player
         else:
           if {_oldItem} is set:
             give {_oldItem} to player
-      else:
-        if {_oldItem} is set:
-          give {_oldItem} to player
-        delete {equip::accessories::%{_u}%::talisman2}
+            delete {equip::accessories::%{_u}%::talisman2}
       wait 1 tick
       eq_recalcStats(player)
       eq_openEquipmentGui(player)
       stop
     
-    # Lock all other slots (stats display, labels, etc.)
+    # Lock all other slots
     cancel event
     stop
 
 on inventory close:
   set {_u} to eq_uid(player)
   set {_invName} to name of event-inventory
-  if {_invName} is "&8Equipment":
+  if {_invName} is eq_cc("&8Equipment"):
     # Update stats when closing
     wait 1 tick
     eq_recalcStats(player)

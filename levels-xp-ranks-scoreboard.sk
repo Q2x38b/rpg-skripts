@@ -169,7 +169,7 @@ function lr_applyTab(p: player):
   set {_tpsStr} to "%round({_tps} * 10) / 10%"
   set {_f} to "%{_f}% &8| &7ᴛᴘs: &f%{_tpsStr}%"
 
-  set {_f} to "%{_f}%%nl%&7ᴡᴇʙsɪᴛᴇ: &f%{_website}%"
+  set {_f} to "%{_f}%%nl%&a ᴡᴇʙsɪᴛᴇ: &f%{_website}%"
 
   set tab list header of {_p} to {_h}
   set tab list footer of {_p} to {_f}

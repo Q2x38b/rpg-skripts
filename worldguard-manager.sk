@@ -188,9 +188,17 @@ on inventory click:
   
   if {wgmGuiOpen::%{_u}%} is true:
     # Check if clicking in player's own inventory (not GUI)
-    # When GUI is open, player inventory is still accessible below the GUI
-    # We need to check if the clicked inventory is the GUI inventory
     if clicked inventory is player's inventory:
+      stop
+    
+    # Check inventory name to ensure it's a wgmanager GUI (check without color codes)
+    set {_invName} to name of event-inventory
+    if {_invName} is not set:
+      stop
+    set {_checkName} to {_invName}
+    replace all "§" with "" in {_checkName}
+    replace all "&" with "" in {_checkName}
+    if {_checkName} does not contain "WorldGuard" and {_checkName} does not contain "World: " and {_checkName} does not contain "Edit Block: ":
       stop
     
     # This is a GUI click - cancel and handle it

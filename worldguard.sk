@@ -21,6 +21,8 @@ options:
   wg_default_drop_restrict: false
   wg_default_pickup_restrict: false
   wg_default_pvp_restrict: false
+  wg_default_craft_restrict: false
+  wg_default_croptrample_restrict: true
   wg_default_mobhit_mode: "all" # all/none/allowlist/denylist
 
 # ----------------------------
@@ -75,6 +77,10 @@ function wg_init_world(wName: text):
     set {wgperm::pickup::%{_wName}%} to {@wg_default_pickup_restrict}
   if {wgperm::pvp::%{_wName}%} is not set:
     set {wgperm::pvp::%{_wName}%} to {@wg_default_pvp_restrict}
+  if {wgperm::craft::%{_wName}%} is not set:
+    set {wgperm::craft::%{_wName}%} to {@wg_default_craft_restrict}
+  if {wgperm::croptrample::%{_wName}%} is not set:
+    set {wgperm::croptrample::%{_wName}%} to {@wg_default_croptrample_restrict}
   if {wgperm::mobhitmode::%{_wName}%} is not set:
     set {wgperm::mobhitmode::%{_wName}%} to {@wg_default_mobhit_mode}
 
@@ -160,6 +166,18 @@ function wg_open_perms_gui(p: player, wName: text):
     set slot 22 of {_inv} to lime dye named wg_cc("&aPvP: Restricted") with lore wg_cc("&7PvP is blocked.") and wg_cc("&8Click to allow.")
   else:
     set slot 22 of {_inv} to gray dye named wg_cc("&7PvP: Allowed") with lore wg_cc("&7PvP is allowed.") and wg_cc("&8Click to restrict.")
+
+  # Crafting
+  if {wgperm::craft::%{_wName}%} is true:
+    set slot 24 of {_inv} to lime dye named wg_cc("&aCrafting: Restricted") with lore wg_cc("&7Crafting is blocked.") and wg_cc("&8Click to allow.")
+  else:
+    set slot 24 of {_inv} to gray dye named wg_cc("&7Crafting: Allowed") with lore wg_cc("&7Crafting is allowed.") and wg_cc("&8Click to restrict.")
+
+  # Crop Trample Protection
+  if {wgperm::croptrample::%{_wName}%} is true:
+    set slot 25 of {_inv} to lime dye named wg_cc("&aCrop Trample: Protected") with lore wg_cc("&7Crops are protected from trampling.") and wg_cc("&8Click to disable.")
+  else:
+    set slot 25 of {_inv} to gray dye named wg_cc("&7Crop Trample: Not Protected") with lore wg_cc("&7Crops can be trampled.") and wg_cc("&8Click to enable.")
 
   # Mobhit mode
   set {_mm} to {wgperm::mobhitmode::%{_wName}%}
@@ -393,6 +411,24 @@ on inventory click:
         set {wgperm::mobhitmode::%{_wName}%} to "denylist"
       else:
         set {wgperm::mobhitmode::%{_wName}%} to "all"
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 24:
+      if {wgperm::craft::%{_wName}%} is true:
+        set {wgperm::craft::%{_wName}%} to false
+      else:
+        set {wgperm::craft::%{_wName}%} to true
+      wait 1 tick
+      wg_open_perms_gui(player, {_wName})
+      stop
+
+    if clicked slot is 25:
+      if {wgperm::croptrample::%{_wName}%} is true:
+        set {wgperm::croptrample::%{_wName}%} to false
+      else:
+        set {wgperm::croptrample::%{_wName}%} to true
       wait 1 tick
       wg_open_perms_gui(player, {_wName})
       stop
@@ -676,10 +712,22 @@ on place:
     if wg_has_bypass(player, {_wName}, "place") is false:
       cancel event
 
-# Protect farmland from being trampled - restore farmland if dirt has crops above
+on craft:
+  set {_wName} to name of world of player
+  wg_init_world({_wName})
+  if {wgperm::craft::%{_wName}%} is true:
+    if wg_has_bypass(player, {_wName}, "craft") is false:
+      cancel event
+
+# Protect farmland from being trampled - restore farmland if dirt has crops above (only if permission enabled)
 every 2 ticks:
   loop all players:
     set {_p} to loop-player
+    set {_wName} to name of world of {_p}
+    wg_init_world({_wName})
+    # Only protect crops if the permission is enabled
+    if {wgperm::croptrample::%{_wName}%} is not true:
+      stop
     set {_loc} to location of {_p}
     set {_x} to x-coordinate of {_loc}
     set {_y} to y-coordinate of {_loc} - 1
@@ -787,8 +835,14 @@ on damage of player:
       if wg_has_bypass(attacker, {_wName}, "pvp") is false:
         cancel event
 
-# Protect crops and farmland from trampling
+# Protect crops and farmland from trampling (only if permission enabled)
 on block fade:
+  set {_loc} to location of event-block
+  set {_wName} to name of world of {_loc}
+  wg_init_world({_wName})
+  # Only protect if the permission is enabled
+  if {wgperm::croptrample::%{_wName}%} is not true:
+    stop
   set {_bt} to type of event-block
   set {_btStr} to "%{_bt}%"
   if {_btStr} is "wheat":

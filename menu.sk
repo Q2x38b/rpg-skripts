@@ -1,0 +1,177 @@
+# =========================================================
+# Main Menu (Hypixel Skyblock Style)
+# Central hub for all player commands
+# =========================================================
+
+options:
+  admin_perm: tablevels.admin
+
+# ----------------------------
+# Helpers
+# ----------------------------
+
+function menu_cc(t: text) :: text:
+  set {_s} to {_t}
+  replace all "&" with "§" in {_s}
+  return {_s}
+
+function menu_uid(p: player) :: text:
+  return "%uuid of {_p}%"
+
+# ----------------------------
+# Main Menu GUI
+# ----------------------------
+
+function menu_openMainMenu(p: player):
+  set {_u} to menu_uid({_p})
+  set {_inv} to chest inventory with 6 rows named menu_cc("&8Menu")
+  
+  # Fill background with black glass
+  set {_i} to 0
+  set {_glass} to black stained glass pane
+  set name of {_glass} to " "
+  while {_i} < 54:
+    set slot {_i} of {_inv} to {_glass}
+    add 1 to {_i}
+  
+  # Player head in center (slot 22) with info
+  set {_level} to {level::%{_u}%}
+  if {_level} is not set:
+    set {_level} to 1
+  set {_xp} to {xp::%{_u}%}
+  if {_xp} is not set:
+    set {_xp} to 0
+  
+  # Get rank info
+  set {_rankKey} to {rank::%{_u}%}
+  if {_rankKey} is not set:
+    set {_rankKey} to "member"
+  set {_rankPrefix} to {ranks::%{_rankKey}%::prefix}
+  if {_rankPrefix} is not set:
+    set {_rankPrefix} to "&7Member"
+  
+  set {_head} to player head
+  set name of {_head} to menu_cc("&f%name of {_p}%")
+  set lore of {_head} to menu_cc("&8") and menu_cc("&7Rank: %{_rankPrefix}%") and menu_cc("&7Level: &f%{_level}%") and menu_cc("&7XP: &f%{_xp}%") and menu_cc("&8") and menu_cc("&7Welcome to the Menu!")
+  set slot 22 of {_inv} to {_head}
+  
+  # Quests (slot 10) - Emerald
+  set slot 10 of {_inv} to emerald named menu_cc("&a&lQuests") with lore menu_cc("&8") and menu_cc("&7View and complete quests") and menu_cc("&7to earn rewards and XP!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  
+  # Warps (slot 12) - Compass
+  set slot 12 of {_inv} to compass named menu_cc("&e&lWarps") with lore menu_cc("&8") and menu_cc("&7Teleport to different") and menu_cc("&7locations around the server!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  
+  # Equipment (slot 14) - Diamond Chestplate
+  set slot 14 of {_inv} to diamond chestplate named menu_cc("&b&lEquipment") with lore menu_cc("&8") and menu_cc("&7Manage your armor and") and menu_cc("&7accessories!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  
+  # Level (slot 16) - Experience Bottle
+  set slot 16 of {_inv} to experience bottle named menu_cc("&d&lLevel") with lore menu_cc("&8") and menu_cc("&7View your level progress") and menu_cc("&7and statistics!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  
+  # Ranks (slot 28) - Name Tag
+  set {_hasRankPerm} to false
+  if {_p} has permission "{@admin_perm}":
+    set {_hasRankPerm} to true
+  if {_p} has permission "tablevels.rank.mod":
+    set {_hasRankPerm} to true
+  if {_hasRankPerm} is true:
+    set slot 28 of {_inv} to name tag named menu_cc("&c&lRanks") with lore menu_cc("&8") and menu_cc("&7View and manage server") and menu_cc("&7ranks and permissions!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  else:
+    set slot 28 of {_inv} to name tag named menu_cc("&7Ranks") with lore menu_cc("&8") and menu_cc("&7View available ranks") and menu_cc("&7on the server!") and menu_cc("&8") and menu_cc("&eClick to open!")
+  
+  
+  # Close button (slot 49)
+  set slot 49 of {_inv} to barrier named menu_cc("&cClose") with lore menu_cc("&8") and menu_cc("&7Click to close the menu")
+  
+  set {menuGuiOpen::%{_u}%} to true
+  open {_inv} to {_p}
+
+# ----------------------------
+# Commands
+# ----------------------------
+
+command /menu:
+  executable by: players
+  trigger:
+    menu_openMainMenu(player)
+
+command /hub:
+  executable by: players
+  trigger:
+    menu_openMainMenu(player)
+
+# ----------------------------
+# GUI Click Handling
+# ----------------------------
+
+on inventory click:
+  set {_u} to menu_uid(player)
+  
+  if {menuGuiOpen::%{_u}%} is true:
+    # Check if clicking in player's own inventory (not GUI)
+    if clicked inventory is player's inventory:
+      stop
+    
+    # Check inventory name (use converted color code)
+    set {_invName} to name of event-inventory
+    if {_invName} is not set:
+      stop
+    if {_invName} is not menu_cc("&8Menu"):
+      stop
+    
+    cancel event
+    set {_slotNum} to clicked slot
+    if {_slotNum} is not set:
+      stop
+    
+    # Close button
+    if {_slotNum} is 49:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      stop
+    
+    # Quests
+    if {_slotNum} is 10:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      wait 1 tick
+      q_openQuestGui(player)
+      stop
+    
+    # Warps
+    if {_slotNum} is 12:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      wait 1 tick
+      openWarpMenu(player)
+      stop
+    
+    # Equipment
+    if {_slotNum} is 14:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      wait 1 tick
+      eq_openEquipmentGui(player)
+      stop
+    
+    # Level
+    if {_slotNum} is 16:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      wait 1 tick
+      lr_openLevelGui(player)
+      stop
+    
+    # Ranks
+    if {_slotNum} is 28:
+      close player's inventory
+      delete {menuGuiOpen::%{_u}%}
+      wait 1 tick
+      lr_openRanks(player)
+      stop
+    
+    stop
+
+on inventory close:
+  set {_u} to menu_uid(player)
+  delete {menuGuiOpen::%{_u}%}
+
