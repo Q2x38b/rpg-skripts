@@ -5,9 +5,14 @@
 # =========================================================
 
 options:
+  # Legacy lore format (old style)
   lore_speed_prefix: &7Mining Speed: &a+
   lore_fortune_prefix: &7Mining Fortune: &b+
   lore_farming_fortune_prefix: &7Farming Fortune: &a+
+  # New Hypixel Skyblock style lore format (with symbols)
+  lore_speed_prefix_new: ⸕ Mining Speed
+  lore_fortune_prefix_new: ☘ Mining Fortune
+  lore_farming_fortune_prefix_new: ☘ Farming Fortune
 
   default_mining_speed: 1.0
   max_distance: 6
@@ -256,8 +261,14 @@ function ms_isTool(it: itemstack) :: boolean:
   if {_l::*} is not set:
     return false
   set {_prefix} to "{@lore_speed_prefix}"
+  set {_prefixNew} to "{@lore_speed_prefix_new}"
   loop {_l::*}:
-    if "%loop-value%" starts with "%{_prefix}%":
+    set {_line} to "%loop-value%"
+    # Check old format
+    if {_line} starts with "%{_prefix}%":
+      return true
+    # Check new Hypixel format
+    if {_line} contains {_prefixNew}:
       return true
   return false
 
@@ -284,9 +295,14 @@ function ms_speed(it: itemstack) :: number:
   if {_l::*} is not set:
     return {@default_mining_speed}
 
+  # Check both old and new formats
   set {_prefix} to "{@lore_speed_prefix}"
+  set {_prefixNew} to "{@lore_speed_prefix_new}"
+
   loop {_l::*}:
     set {_line} to "%loop-value%"
+
+    # Check old format first
     if {_line} starts with "%{_prefix}%":
       set {_raw} to {_line}
       replace all "%{_prefix}%" with "" in {_raw}
@@ -295,9 +311,26 @@ function ms_speed(it: itemstack) :: number:
       if {_n} is set:
         if {_n} < 0.05:
           return 0.05
-        if {_n} > 200:
-          return 200
+        if {_n} > 500:
+          return 500
         return {_n}
+
+    # Check new Hypixel Skyblock format (contains "Mining Speed" and has +number)
+    if {_line} contains {_prefixNew}:
+      set {_raw} to {_line}
+      # Extract number after + sign
+      loop split {_raw} by " ":
+        set {_part} to loop-value-2
+        if {_part} starts with "+":
+          replace all "+" with "" in {_part}
+          replace all "," with "" in {_part}
+          set {_n} to {_part} parsed as number
+          if {_n} is set:
+            if {_n} < 0.05:
+              return 0.05
+            if {_n} > 500:
+              return 500
+            return {_n}
 
   return {@default_mining_speed}
 
@@ -315,9 +348,14 @@ function ms_fortune(it: itemstack) :: number:
   if {_l::*} is not set:
     return 0
 
+  # Check both old and new formats
   set {_prefix} to "{@lore_fortune_prefix}"
+  set {_prefixNew} to "{@lore_fortune_prefix_new}"
+
   loop {_l::*}:
     set {_line} to "%loop-value%"
+
+    # Check old format first
     if {_line} starts with "%{_prefix}%":
       set {_raw} to {_line}
       replace all "%{_prefix}%" with "" in {_raw}
@@ -327,6 +365,23 @@ function ms_fortune(it: itemstack) :: number:
         if {_n} < 0:
           return 0
         return floor({_n})
+
+    # Check new Hypixel Skyblock format (contains "Mining Fortune" and has +number)
+    if {_line} contains {_prefixNew}:
+      # Make sure it's Mining Fortune, not Farming Fortune
+      if {_line} contains "Mining Fortune":
+        set {_raw} to {_line}
+        # Extract number after + sign
+        loop split {_raw} by " ":
+          set {_part} to loop-value-2
+          if {_part} starts with "+":
+            replace all "+" with "" in {_part}
+            replace all "," with "" in {_part}
+            set {_n} to {_part} parsed as number
+            if {_n} is set:
+              if {_n} < 0:
+                return 0
+              return floor({_n})
 
   return 0
 
@@ -362,9 +417,14 @@ function ms_farmingFortune(it: itemstack) :: number:
   if {_l::*} is not set:
     return 0
 
+  # Check both old and new formats
   set {_prefix} to "{@lore_farming_fortune_prefix}"
+  set {_prefixNew} to "{@lore_farming_fortune_prefix_new}"
+
   loop {_l::*}:
     set {_line} to "%loop-value%"
+
+    # Check old format first
     if {_line} starts with "%{_prefix}%":
       set {_raw} to {_line}
       replace all "%{_prefix}%" with "" in {_raw}
@@ -374,6 +434,22 @@ function ms_farmingFortune(it: itemstack) :: number:
         if {_n} < 0:
           return 0
         return floor({_n})
+
+    # Check new Hypixel Skyblock format (contains "Farming Fortune" and has +number)
+    if {_line} contains {_prefixNew}:
+      if {_line} contains "Farming Fortune":
+        set {_raw} to {_line}
+        # Extract number after + sign
+        loop split {_raw} by " ":
+          set {_part} to loop-value-2
+          if {_part} starts with "+":
+            replace all "+" with "" in {_part}
+            replace all "," with "" in {_part}
+            set {_n} to {_part} parsed as number
+            if {_n} is set:
+              if {_n} < 0:
+                return 0
+              return floor({_n})
 
   return 0
 
