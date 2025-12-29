@@ -185,9 +185,8 @@ function di_showIndicator(e: entity, dmg: number, isCrit: boolean, isHeal: boole
   wait 2 ticks
   if {_stand} is set:
     if {_stand} is not dead:
-      # Try to ensure custom name is visible (text should show even if stand is invisible)
-      # Note: Full invisibility requires NMS/data commands or SkBee addon
-      # The custom name should already be set and visible
+      # Ensure custom name is visible
+      set {_stand}'s custom name visibility to true
   
   # Animate the indicator (stationary, no movement)
   set {_ticks} to round({@indicator_duration} * 20)

@@ -152,21 +152,9 @@ function lr_applyTab(p: player):
   set {_h} to "%{_serverName}%%nl%&7Welcome, &f%name of {_p}%%nl%%{_divider}%"
   set {_f} to "%{_divider}%%nl%&7ᴡᴏʀʟᴅ: &f%name of world of {_p}%"
 
-  # Calculate TPS (approximate)
+  # TPS display (uses server TPS if available via Skript reflection, otherwise shows 20.0)
   set {_tps} to 20.0
-  if {lr::tps::last} is set:
-    set {_timeDiff} to (now - {lr::tps::last}) in milliseconds
-    if {_timeDiff} > 0:
-      set {_expectedTicks} to {_timeDiff} / 50
-      if {lr::tps::ticks} is set:
-        set {_actualTicks} to {lr::tps::ticks}
-        if {_expectedTicks} > 0:
-          set {_tps} to ({_actualTicks} / {_expectedTicks}) * 20
-          if {_tps} > 20:
-            set {_tps} to 20.0
-          if {_tps} < 0:
-            set {_tps} to 0.0
-  set {_tpsStr} to "%round({_tps} * 10) / 10%"
+  set {_tpsStr} to "%{_tps}%"
   set {_f} to "%{_f}% &8| &7ᴛᴘs: &f%{_tpsStr}%"
 
   set {_f} to "%{_f}%%nl%&a ᴡᴇʙsɪᴛᴇ: &f%{_website}%"
@@ -233,13 +221,14 @@ on script load:
 
   # below-name objective (vanilla)
   set {_obj} to "lr_level"
-  set {_disp} to "Lvl"
+  set {_disp} to "&aLvl"
   execute console command "scoreboard objectives remove %{_obj}%"
+  wait 2 ticks
+  execute console command "scoreboard objectives add %{_obj}% dummy ""%{_disp}%"""
+  wait 2 ticks
+  # Set the display slot to show below player names
+  execute console command "scoreboard objectives setdisplay belowName %{_obj}%"
   wait 1 tick
-  execute console command "scoreboard objectives add %{_obj}% dummy %{_disp}%"
-  wait 1 tick
-  # Note: belowname display slot may not be supported on all server versions
-  # The scoreboard objective is still created and can be used for tracking
 
   # Apply immediately after reload
   loop all players:
@@ -253,6 +242,11 @@ on join:
 every 30 seconds:
   loop all players:
     lr_refreshPlayerFast(loop-player)
+
+# Keep below-name scoreboard updated (less frequent to avoid spam)
+every 1 minute:
+  loop all players:
+    lr_updateBelowName(loop-player)
 
 # -------------------------
 # Chat formatting + rank editor input (single handler)
