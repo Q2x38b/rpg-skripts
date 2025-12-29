@@ -16,7 +16,7 @@ options:
 
   # XP
   mining_xp: 5
-  xp_actionbar_seconds: 5
+  xp_actionbar_seconds: 10
   # below-name objective (vanilla scoreboard)
   belowname_objective: lr_level
   belowname_display: &aLvl
@@ -268,14 +268,17 @@ function lr_updateSidebar(p: player):
   set {_i} to 0
   while {_i} < 10:
     if {_i} < {_filled}:
-      set {_bar} to "%{_bar}%&a▌"
+      set {_bar} to "%{_bar}%§a▌"
     else:
-      set {_bar} to "%{_bar}%&8▌"
+      set {_bar} to "%{_bar}%§8▌"
     add 1 to {_i}
 
   # Get rank info
   set {_prefix} to lr_rankPrefix({_p})
   set {_lvlCol} to lr_levelColor({_lvl})
+  # Convert color code to section symbol
+  replace all "&" with "§" in {_prefix}
+  replace all "&" with "§" in {_lvlCol}
 
   # Get stats from health system
   set {_hp} to {ha::hp::%{_u}%}
@@ -302,45 +305,33 @@ function lr_updateSidebar(p: player):
   if {_mFortune} is not set:
     set {_mFortune} to 0
 
-  # Build sidebar lines (sent bottom to top, scores 1-15)
-  # Using a custom scoreboard display
-  set {_title} to "&a&lVᴇɴᴛᴜʀᴇ &7Rᴘɢ"
+  # Build sidebar using vanilla scoreboard commands
+  set {_pName} to name of {_p}
+  set {_objName} to "lr_sb_%{_pName}%"
 
-  # Clear old sidebar and create new one
-  set {_lines::1} to " "
-  set {_lines::2} to "&7Rank: %{_prefix}%"
-  set {_lines::3} to "&7Level: %{_lvlCol}%%{_lvl}%"
-  set {_lines::4} to "  "
-  set {_lines::5} to "&7Progress: &f%{_pct}%%%"
-  set {_lines::6} to "&8[%{_bar}%&8]"
-  set {_lines::7} to "&7XP: &a%{_xp}%&7/&a%{_need}%"
-  set {_lines::8} to "   "
-  set {_lines::9} to "&c❤ &f%round({_hp})%&7/%{_maxHp}%"
-  set {_lines::10} to "&9✎ &f%round({_mana})%&7/%{_maxMana}%"
-  set {_lines::11} to "    "
-  set {_lines::12} to "&a⸕ &f%{_mSpeed}% &7Speed"
-  set {_lines::13} to "&b☘ &f%{_mFortune}% &7Fortune"
-  set {_lines::14} to "     "
-  set {_lines::15} to "&7World: &f%name of world of {_p}%"
+  # Remove old objective and create new one with title
+  execute console command "scoreboard objectives remove %{_objName}%"
+  wait 1 tick
+  execute console command "scoreboard objectives add %{_objName}% dummy ""§a§lVᴇɴᴛᴜʀᴇ §7Rᴘɢ"""
+  execute console command "scoreboard objectives setdisplay sidebar %{_objName}%"
 
-  # Send scoreboard using Skript's built-in system
-  # We'll use the sidebar title and lines
-  set title of sidebar of {_p} to {_title}
-  set line 15 of sidebar of {_p} to {_lines::1}
-  set line 14 of sidebar of {_p} to {_lines::2}
-  set line 13 of sidebar of {_p} to {_lines::3}
-  set line 12 of sidebar of {_p} to {_lines::4}
-  set line 11 of sidebar of {_p} to {_lines::5}
-  set line 10 of sidebar of {_p} to {_lines::6}
-  set line 9 of sidebar of {_p} to {_lines::7}
-  set line 8 of sidebar of {_p} to {_lines::8}
-  set line 7 of sidebar of {_p} to {_lines::9}
-  set line 6 of sidebar of {_p} to {_lines::10}
-  set line 5 of sidebar of {_p} to {_lines::11}
-  set line 4 of sidebar of {_p} to {_lines::12}
-  set line 3 of sidebar of {_p} to {_lines::13}
-  set line 2 of sidebar of {_p} to {_lines::14}
-  set line 1 of sidebar of {_p} to {_lines::15}
+  # Set scoreboard lines (higher score = higher position)
+  # Line 15 (top) to Line 1 (bottom)
+  execute console command "scoreboard players set "" %{_objName}% 15"
+  execute console command "scoreboard players set ""§7Rank: %{_prefix}%"" %{_objName}% 14"
+  execute console command "scoreboard players set ""§7Level: %{_lvlCol}%%{_lvl}%"" %{_objName}% 13"
+  execute console command "scoreboard players set "" "" %{_objName}% 12"
+  execute console command "scoreboard players set ""§7Progress: §f%{_pct}%%"" %{_objName}% 11"
+  execute console command "scoreboard players set ""§8[%{_bar}%§8]"" %{_objName}% 10"
+  execute console command "scoreboard players set ""§7XP: §a%{_xp}%§7/§a%{_need}%"" %{_objName}% 9"
+  execute console command "scoreboard players set ""   "" %{_objName}% 8"
+  execute console command "scoreboard players set ""§c❤ §f%round({_hp})%§7/%{_maxHp}%"" %{_objName}% 7"
+  execute console command "scoreboard players set ""§9✎ §f%round({_mana})%§7/%{_maxMana}%"" %{_objName}% 6"
+  execute console command "scoreboard players set ""    "" %{_objName}% 5"
+  execute console command "scoreboard players set ""§a⸕ §f%{_mSpeed}% §7Speed"" %{_objName}% 4"
+  execute console command "scoreboard players set ""§b☘ §f%{_mFortune}% §7Fortune"" %{_objName}% 3"
+  execute console command "scoreboard players set ""     "" %{_objName}% 2"
+  execute console command "scoreboard players set ""§7World: §f%name of world of {_p}%"" %{_objName}% 1"
 
 on join:
   wait 2 ticks

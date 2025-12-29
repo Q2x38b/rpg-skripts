@@ -26,7 +26,7 @@ function eq_isAccessory(i: item) :: boolean:
   if lore of {_i} is not set:
     return false
   loop lore of {_i}:
-    set {_line} to "%loop-value%"
+    set {_line} to loop-value
     # Check for rarity line containing ACCESSORY
     if {_line} contains "ACCESSORY":
       return true
@@ -49,7 +49,7 @@ function eq_getStatFromLore(i: item, statName: text) :: number:
     return 0
 
   loop lore of {_i}:
-    set {_l} to "%loop-value%"
+    set {_l} to loop-value
     if {_l} contains {_statName}:
       # Extract the number after the stat name
       set {_t} to {_l}
@@ -289,7 +289,7 @@ function eq_openEquipmentGui(p: player):
   set {_totalMana} to 100 + {_mana}
 
   # Player head in center (slot 22) with full stats
-  set {_head} to player's skull named eq_cc("&a%name of {_p}%'s Stats")
+  set {_head} to {_p}'s skull named eq_cc("&a%name of {_p}%'s Stats")
   set lore of {_head} to eq_cc("&8Player Statistics") and eq_cc("") and eq_cc("&7Level: &f%{_level}%") and eq_cc("") and eq_cc("&c❤ Health: &f%{_totalHp}% &7(&a+%{_hp}%&7)") and eq_cc("&9✎ Mana: &f%{_totalMana}% &7(&9+%{_mana}%&7)") and eq_cc("&a❈ Defense: &f%{_defense}%") and eq_cc("&c❁ Strength: &f%{_strength}%") and eq_cc("") and eq_cc("&a⸕ Mining Speed: &f+%{_speed}%") and eq_cc("&b☘ Mining Fortune: &f+%{_fortune}%")
   set slot 22 of {_inv} to {_head}
 
