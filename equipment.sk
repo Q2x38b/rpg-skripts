@@ -302,7 +302,8 @@ on inventory click:
       if {_itemToEquip} is set:
         if {_itemToEquip} is not air:
           set {_itemType} to type of {_itemToEquip}
-          if {_itemType} is leather helmet or {_itemType} is chainmail helmet or {_itemType} is iron helmet or {_itemType} is golden helmet or {_itemType} is diamond helmet or {_itemType} is netherite helmet:
+          set {_typeStr} to "%{_itemType}%"
+          if {_typeStr} contains "helmet":
             set {_oldArmor} to helmet of player
             if {_oldArmor} is set:
               if {_oldArmor} is not air:
@@ -330,7 +331,8 @@ on inventory click:
       if {_itemToEquip} is set:
         if {_itemToEquip} is not air:
           set {_itemType} to type of {_itemToEquip}
-          if {_itemType} is leather chestplate or {_itemType} is chainmail chestplate or {_itemType} is iron chestplate or {_itemType} is golden chestplate or {_itemType} is diamond chestplate or {_itemType} is netherite chestplate:
+          set {_typeStr} to "%{_itemType}%"
+          if {_typeStr} contains "chestplate":
             set {_oldArmor} to chestplate of player
             if {_oldArmor} is set:
               if {_oldArmor} is not air:
@@ -357,7 +359,8 @@ on inventory click:
       if {_itemToEquip} is set:
         if {_itemToEquip} is not air:
           set {_itemType} to type of {_itemToEquip}
-          if {_itemType} is leather leggings or {_itemType} is chainmail leggings or {_itemType} is iron leggings or {_itemType} is golden leggings or {_itemType} is diamond leggings or {_itemType} is netherite leggings:
+          set {_typeStr} to "%{_itemType}%"
+          if {_typeStr} contains "leggings":
             set {_oldArmor} to leggings of player
             if {_oldArmor} is set:
               if {_oldArmor} is not air:
@@ -384,7 +387,8 @@ on inventory click:
       if {_itemToEquip} is set:
         if {_itemToEquip} is not air:
           set {_itemType} to type of {_itemToEquip}
-          if {_itemType} is leather boots or {_itemType} is chainmail boots or {_itemType} is iron boots or {_itemType} is golden boots or {_itemType} is diamond boots or {_itemType} is netherite boots:
+          set {_typeStr} to "%{_itemType}%"
+          if {_typeStr} contains "boots":
             set {_oldArmor} to boots of player
             if {_oldArmor} is set:
               if {_oldArmor} is not air:

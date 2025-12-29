@@ -809,7 +809,7 @@ every {@tick_interval}:
           set {_autoPickup} to true
 
         loop {_drops::*}:
-          set {_dropItem} to loop-value
+          set {_dropItem} to loop-value-2
           ms_spawnMultipliedDrop({_p}, {_dropItem}, {_loc}, {_fortuneMult}, {_autoPickup})
 
         if "%{_ph}%" is "air":
@@ -823,7 +823,7 @@ every {@tick_interval}:
         # No regen - handle drops normally (always give drops for whitelisted blocks)
         set {_autoPickup} to autoPickupEnabled({_p})
         loop {_drops::*}:
-          set {_dropItem} to loop-value
+          set {_dropItem} to loop-value-2
           ms_spawnMultipliedDrop({_p}, {_dropItem}, {_loc}, {_fortuneMult}, {_autoPickup})
       
       # Clear handled flag after a delay
